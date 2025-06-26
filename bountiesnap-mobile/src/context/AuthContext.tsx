@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { Session, User } from '@supabase/supabase-js'
-import { supabase, createUserWallet } from '../utils/supabase'
+import { supabase, createUserWallet, testDatabaseConnection } from '../utils/supabase'
 import { createWallet } from '../utils/utils'
 
 interface AuthContextType {
@@ -39,6 +39,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Test database connection on app start
+    testDatabaseConnection()
+    
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
@@ -81,7 +84,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           
           console.log('Wallet created successfully for user:', authData.user.id)
         } catch (walletError) {
-          console.error('Failed to create wallet:', walletError)
+          console.error('Failed to create wallet:', {
+            error: walletError,
+            message: walletError instanceof Error ? walletError.message : 'Unknown wallet error',
+            userId: authData.user.id
+          })
           // Note: We don't return the wallet error here as the user account was created successfully
           // The wallet creation can be retried later if needed
         }

@@ -15,29 +15,50 @@ export function formatAmount(
 export async function createWallet(network: string = 'sepolia') {
   const apiKey = process.env.EXPO_PUBLIC_CAVOS_API_KEY;
   
+  console.log('Creating wallet with network:', network)
+  console.log('API Key configured:', !!apiKey)
+  
   if (!apiKey) {
     throw new Error('CAVOS_API_KEY is not configured');
   }
 
-  const response = await fetch('https://services.cavos.xyz/api/v1/external/deploy', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      network
+  try {
+    const requestBody = { network }
+    console.log('Request body:', JSON.stringify(requestBody))
+    
+    const response = await fetch('https://services.cavos.xyz/api/v1/external/deploy', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    console.log('Response status:', response.status)
+    console.log('Response ok:', response.ok)
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Wallet creation API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorData: errorData
+      });
+      throw new Error(`Wallet creation failed: ${response.status} - ${JSON.stringify(errorData)}`);
+    }
+
+    const data = await response.json();
+    console.log('Wallet creation response:', JSON.stringify(data, null, 2))
+    return data;
+  } catch (error) {
+    console.error('Wallet creation error:', {
+      error: error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
     })
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    console.error('Wallet creation failed:', errorData);
-    throw new Error(`Wallet creation failed: ${response.status}`);
+    throw error;
   }
-
-  const data = await response.json();
-  return data;
 }
 
 export async function callExecuteEndpoint(

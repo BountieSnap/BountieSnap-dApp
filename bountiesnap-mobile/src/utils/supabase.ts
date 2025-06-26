@@ -16,30 +16,77 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 })
 
+// Test function to check if user_wallets table exists and is accessible
+export async function testDatabaseConnection() {
+  try {
+    console.log('Testing database connection...')
+    const { data, error } = await supabase
+      .from('user_wallets')
+      .select('id')
+      .limit(1)
+
+    if (error) {
+      console.error('Database test error:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      })
+      return { success: false, error }
+    }
+
+    console.log('Database test successful')
+    return { success: true, data }
+  } catch (error) {
+    console.error('Database test failed:', error)
+    return { success: false, error }
+  }
+}
+
 // Helper function to store user wallet data
 export async function createUserWallet(userId: string, walletData: any) {
   try {
+    console.log('Attempting to store wallet data for user:', userId)
+    console.log('Wallet data received:', JSON.stringify(walletData, null, 2))
+    
+    // Validate required fields
+    if (!walletData || !walletData.address) {
+      throw new Error('Invalid wallet data: missing address field')
+    }
+
+    const walletRecord = {
+      id: userId,
+      wallet_address: walletData.address,
+      wallet_data: walletData,
+      network: walletData.network || 'sepolia',
+      created_at: new Date().toISOString(),
+    }
+    
+    console.log('Wallet record to insert:', JSON.stringify(walletRecord, null, 2))
+
     const { data, error } = await supabase
       .from('user_wallets')
-      .insert([
-        {
-          id: userId,
-          wallet_address: walletData.address,
-          wallet_data: walletData,
-          network: walletData.network || 'sepolia',
-          created_at: new Date().toISOString(),
-        }
-      ])
+      .insert([walletRecord])
       .select()
 
     if (error) {
-      console.error('Error storing wallet data:', error)
+      console.error('Supabase error details:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      })
       throw error
     }
 
+    console.log('Wallet data stored successfully:', data)
     return data
   } catch (error) {
-    console.error('Failed to store wallet data:', error)
+    console.error('Failed to store wallet data:', {
+      error: error,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    })
     throw error
   }
 }
