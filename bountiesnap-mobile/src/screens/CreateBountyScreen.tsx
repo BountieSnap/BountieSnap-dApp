@@ -13,9 +13,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { useBounty } from '../context/BountyContext';
+import { useContract } from '../hooks/useContract';
+import { CreateBountyParams } from '../contracts/BountyContract';
 
 export default function CreateBountyScreen({ navigation }: any) {
   const { createBounty } = useBounty();
+  const { createBounty: createContractBounty, loading, error } = useContract();
   const [step, setStep] = useState(1);
   const [bountyData, setBountyData] = useState({
     title: '',
@@ -43,11 +46,52 @@ export default function CreateBountyScreen({ navigation }: any) {
     if (step > 1) setStep(step - 1);
   };
 
-  const handleSubmit = () => {
-    createBounty(bountyData);
-    Alert.alert('Success', 'Bounty created successfully!', [
-      { text: 'OK', onPress: () => navigation.goBack() }
-    ]);
+  const handleSubmit = async () => {
+    try {
+      // Validate required fields
+      if (!bountyData.title || !bountyData.description || !bountyData.payment || !bountyData.deadline) {
+        Alert.alert('Error', 'Please fill in all required fields');
+        return;
+      }
+
+      // Parse deadline to timestamp (assuming deadline is in format "MM/DD/YYYY" or similar)
+      const deadlineTimestamp = Math.floor(Date.now() / 1000) + (24 * 60 * 60); // Default: 24 hours from now
+      
+      // Prepare contract parameters
+      const contractParams: CreateBountyParams = {
+        description: `${bountyData.title}: ${bountyData.description}`, // Combine title and description
+        amount: bountyData.payment.toString(), // Amount in STRK
+        deadline: deadlineTimestamp
+      };
+
+      console.log('Creating bounty on blockchain with params:', contractParams);
+
+      // Create bounty on the smart contract
+      const result = await createContractBounty(contractParams);
+      
+      console.log('Smart contract result:', result);
+
+      // Also create locally for UI
+      createBounty({
+        ...bountyData,
+        contractBountyId: result.bountyId,
+        txHash: result.txHash,
+      });
+
+      Alert.alert(
+        'Success!', 
+        `Bounty created successfully!\n\nBounty ID: ${result.bountyId}\nTransaction: ${result.txHash?.slice(0, 10)}...`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+
+    } catch (error) {
+      console.error('Error creating bounty:', error);
+      Alert.alert(
+        'Error', 
+        error instanceof Error ? error.message : 'Failed to create bounty. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   const selectedCategory = categories.find(cat => cat.id === bountyData.category);
@@ -267,14 +311,14 @@ export default function CreateBountyScreen({ navigation }: any) {
         <TouchableOpacity
           style={[styles.nextButton, step === 1 && styles.fullWidthButton]}
           onPress={step === 3 ? handleSubmit : handleNext}
-          disabled={step === 1 && (!bountyData.title || !bountyData.description)}
+          disabled={(step === 1 && (!bountyData.title || !bountyData.description)) || (step === 3 && loading)}
         >
           <LinearGradient
             colors={['#8B5CF6', '#3B82F6']}
             style={styles.nextButtonGradient}
           >
             <Text style={styles.nextButtonText}>
-              {step === 3 ? 'Create Bounty' : 'Next'}
+              {step === 3 && loading ? 'Creating on Blockchain...' : (step === 3 ? 'Create Bounty' : 'Next')}
             </Text>
           </LinearGradient>
         </TouchableOpacity>
