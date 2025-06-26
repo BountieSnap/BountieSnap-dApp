@@ -5,6 +5,7 @@ A React Native mobile application for bounty hunting with location-based tasks.
 ## Features
 
 - 🔐 **Authentication** - Email/password authentication with Supabase
+- 💰 **Wallet Creation** - Automatic Starknet wallet creation using Cavos API
 - 🗺️ **Location-based Tasks** - Find and complete tasks near you
 - 🏆 **Achievements** - Track your progress and earn rewards
 - 👤 **User Profiles** - Manage your profile and view statistics
@@ -18,23 +19,33 @@ A React Native mobile application for bounty hunting with location-based tasks.
 npm install
 ```
 
-### 2. Configure Supabase
+### 2. Configure Environment Variables
 
 1. Create a new project at [supabase.com](https://supabase.com)
 2. Go to Settings > API to get your project URL and anon key
-3. Copy `.env.example` to `.env`:
+3. Get your Cavos API key from [cavos.xyz](https://cavos.xyz)
+4. Copy `.env.example` to `.env`:
    ```bash
    cp .env.example .env
    ```
-4. Update the `.env` file with your Supabase credentials:
+5. Update the `.env` file with your credentials:
    ```
    EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
    EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+   EXPO_PUBLIC_CAVOS_API_KEY=your-cavos-api-key-here
    ```
 
 ### 3. Set up Supabase Database
 
 You'll need to create the following tables in your Supabase database:
+
+#### Required: User Wallets Table
+Run the SQL from `supabase-schema.sql` in your Supabase SQL editor to create the `user_wallets` table:
+
+```sql
+-- This will create the user_wallets table with proper RLS policies
+-- Copy and paste the content from supabase-schema.sql
+```
 
 #### Users table (handled by Supabase Auth automatically)
 The authentication is handled by Supabase's built-in auth system.
@@ -129,6 +140,11 @@ The app uses Supabase Auth for:
 - Session management
 - Automatic token refresh
 - Secure logout
+
+The app uses Cavos API for:
+- Automatic Starknet wallet creation on signup
+- Wallet deployment on Sepolia testnet
+- Secure wallet management
 
 ## Development
 

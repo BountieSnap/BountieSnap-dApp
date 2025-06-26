@@ -14,4 +14,53 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: false,
   },
-}) 
+})
+
+// Helper function to store user wallet data
+export async function createUserWallet(userId: string, walletData: any) {
+  try {
+    const { data, error } = await supabase
+      .from('user_wallets')
+      .insert([
+        {
+          id: userId,
+          wallet_address: walletData.address,
+          wallet_data: walletData,
+          network: walletData.network || 'sepolia',
+          created_at: new Date().toISOString(),
+        }
+      ])
+      .select()
+
+    if (error) {
+      console.error('Error storing wallet data:', error)
+      throw error
+    }
+
+    return data
+  } catch (error) {
+    console.error('Failed to store wallet data:', error)
+    throw error
+  }
+}
+
+// Helper function to get user wallet data
+export async function getUserWallet(userId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('user_wallets')
+      .select('*')
+      .eq('id', userId)
+      .single()
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+      console.error('Error fetching wallet data:', error)
+      throw error
+    }
+
+    return data
+  } catch (error) {
+    console.error('Failed to fetch wallet data:', error)
+    throw error
+  }
+} 

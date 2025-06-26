@@ -30,7 +30,8 @@
     "react-native-screens": "3.31.1",
     "react-native-url-polyfill": "^2.0.0",
     "react-native-vector-icons": "^10.0.3",
-    "resolve-from": "^5.0.0"
+    "resolve-from": "^5.0.0",
+    "starknet": "^7.6.2"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
