@@ -6,15 +6,18 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { useBounty } from '../context/BountyContext';
+import { useAuth } from '../context/AuthContext';
 
 export default function ProfileScreen() {
   const { user, userTasks } = useBounty();
+  const { signOut, user: authUser } = useAuth();
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -26,12 +29,20 @@ export default function ProfileScreen() {
   const completedTasks = userTasks.filter(task => task.status === 'completed');
   const streakDays = 12; // Simulated
 
+  const handleLogout = async () => {
+    const { error } = await signOut();
+    if (error) {
+      Alert.alert('Error', 'Failed to log out');
+    }
+  };
+
   const settingsItems = [
     { label: 'Edit Profile', icon: 'person-outline' },
     { label: 'Payment Methods', icon: 'card-outline' },
     { label: 'Notifications', icon: 'notifications-outline' },
     { label: 'Privacy & Security', icon: 'shield-outline' },
-    { label: 'Help & Support', icon: 'help-circle-outline' }
+    { label: 'Help & Support', icon: 'help-circle-outline' },
+    { label: 'Logout', icon: 'log-out-outline', action: handleLogout, isLogout: true }
   ];
 
   return (
@@ -177,12 +188,22 @@ export default function ProfileScreen() {
             <Text style={styles.cardTitle}>Settings</Text>
             <View style={styles.settingsList}>
               {settingsItems.map((item, index) => (
-                <TouchableOpacity key={index} style={styles.settingsItem}>
+                <TouchableOpacity 
+                  key={index} 
+                  style={[styles.settingsItem, item.isLogout && styles.logoutItem]}
+                  onPress={item.action}
+                >
                   <View style={styles.settingsItemLeft}>
-                    <Ionicons name={item.icon as any} size={20} color="#6B7280" />
-                    <Text style={styles.settingsItemText}>{item.label}</Text>
+                    <Ionicons 
+                      name={item.icon as any} 
+                      size={20} 
+                      color={item.isLogout ? "#EF4444" : "#6B7280"} 
+                    />
+                    <Text style={[styles.settingsItemText, item.isLogout && styles.logoutText]}>
+                      {item.label}
+                    </Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+                  {!item.isLogout && <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />}
                 </TouchableOpacity>
               ))}
             </View>
@@ -469,5 +490,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#374151',
     marginLeft: 12,
+  },
+  logoutItem: {
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    marginTop: 8,
+    paddingTop: 16,
+  },
+  logoutText: {
+    color: '#EF4444',
+    fontWeight: '600',
   },
 });

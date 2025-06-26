@@ -11,10 +11,15 @@ import TasksScreen from './src/screens/TasksScreen';
 import AchievementsScreen from './src/screens/AchievementsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import CreateBountyScreen from './src/screens/CreateBountyScreen';
+import LoginScreen from './src/screens/LoginScreen';
+import SignUpScreen from './src/screens/SignUpScreen';
+import LoadingScreen from './src/screens/LoadingScreen';
 import { BountyProvider } from './src/context/BountyContext';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
+const AuthStack = createStackNavigator();
 
 function TabNavigator() {
   return (
@@ -58,22 +63,49 @@ function TabNavigator() {
   );
 }
 
+function AuthNavigator() {
+  return (
+    <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+      <AuthStack.Screen name="Login" component={LoginScreen} />
+      <AuthStack.Screen name="SignUp" component={SignUpScreen} />
+    </AuthStack.Navigator>
+  );
+}
+
+function AppNavigator() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
+  return (
+    <NavigationContainer>
+      {user ? (
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Main" component={TabNavigator} />
+          <Stack.Screen 
+            name="CreateBounty" 
+            component={CreateBountyScreen}
+            options={{ presentation: 'modal' }}
+          />
+        </Stack.Navigator>
+      ) : (
+        <AuthNavigator />
+      )}
+    </NavigationContainer>
+  );
+}
+
 export default function App() {
   return (
     <SafeAreaProvider>
-      <BountyProvider>
-        <NavigationContainer>
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="Main" component={TabNavigator} />
-            <Stack.Screen 
-              name="CreateBounty" 
-              component={CreateBountyScreen}
-              options={{ presentation: 'modal' }}
-            />
-          </Stack.Navigator>
-        </NavigationContainer>
-        <StatusBar style="auto" />
-      </BountyProvider>
+      <AuthProvider>
+        <BountyProvider>
+          <AppNavigator />
+          <StatusBar style="auto" />
+        </BountyProvider>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }
