@@ -35,7 +35,8 @@
         {
           "photosPermission": "The app accesses your photos to let you share proof of task completion."
         }
-      ]
+      ],
+      "expo-font"
     ],
     "permissions": [
       "ACCESS_FINE_LOCATION",

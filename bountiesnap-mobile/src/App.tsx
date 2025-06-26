@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { View, Text, StyleSheet, SafeAreaView } from 'react-native';
 import { MapView } from './components/MapView';
 import { TaskList } from './components/TaskList';
 import { Achievements } from './components/Achievements';
@@ -134,11 +135,11 @@ function App() {
   };
 
   return (
-    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
+    <SafeAreaView style={styles.container}>
       {/* Main Content */}
-      <div className="flex-1 relative">
+      <View style={styles.mainContent}>
         {renderCurrentView()}
-      </div>
+      </View>
 
       {/* Bottom Navigation */}
       <BottomNavigation
@@ -153,8 +154,19 @@ function App() {
           onSubmit={handleCreateBounty}
         />
       )}
-    </div>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
+  mainContent: {
+    flex: 1,
+    position: 'relative',
+  },
+});
 
 export default App;
