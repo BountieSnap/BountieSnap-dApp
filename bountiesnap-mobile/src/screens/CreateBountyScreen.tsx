@@ -99,7 +99,20 @@ export default function CreateBountyScreen({ navigation }: any) {
       const amountInWei = (bountyData.payment * Math.pow(10, 18)).toString();
       
       // Convert deadline to Unix timestamp (assuming deadline is in days from now)
-      const deadlineTimestamp = Math.floor(Date.now() / 1000) + (parseInt(bountyData.deadline) * 24 * 60 * 60);
+      // Validate and calculate deadline in seconds since epoch
+      const deadlineDays = parseInt(bountyData.deadline);
+      if (isNaN(deadlineDays) || deadlineDays <= 0) {
+        Alert.alert('Error', 'Please enter a valid deadline (number of days)');
+        return;
+      }
+      
+      const deadlineTimestamp = Math.floor(Date.now() / 1000) + (deadlineDays * 24 * 60 * 60);
+      console.log('Deadline calculation:', {
+        input: bountyData.deadline,
+        days: deadlineDays,
+        timestamp: deadlineTimestamp,
+        date: new Date(deadlineTimestamp * 1000).toISOString()
+      });
 
       console.log('Creating bounty on chain with:', {
         description: bountyData.description,
@@ -130,13 +143,16 @@ export default function CreateBountyScreen({ navigation }: any) {
 
       // Store bounty in Supabase database
       console.log('Storing bounty in database...');
+      console.log('Deadline timestamp (seconds):', deadlineTimestamp);
+      console.log('Deadline timestamp (milliseconds):', deadlineTimestamp * 1000);
+      
       await createBounty({
         creator_id: user!.id,
         on_chain_id: onChainId,
         title: bountyData.title.trim(),
         description: bountyData.description.trim(),
         amount: amountInWei,
-        deadline: new Date(deadlineTimestamp).toISOString(),
+        deadline: new Date(deadlineTimestamp * 1000).toISOString(), // Convert seconds to milliseconds
         transaction_hash: transactionHash,
         wallet_address: userWallet.wallet_address
       });
@@ -268,16 +284,20 @@ export default function CreateBountyScreen({ navigation }: any) {
         </View>
 
         <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-          <Text style={styles.inputLabel}>Deadline</Text>
+          <Text style={styles.inputLabel}>Deadline (days)</Text>
           <View style={styles.inputWithIcon}>
             <Ionicons name="time-outline" size={20} color="#9CA3AF" />
             <TextInput
               style={styles.textInputWithIcon}
-              placeholder="Set deadline"
+              placeholder="e.g., 3"
               value={bountyData.deadline}
               onChangeText={(text) => setBountyData({ ...bountyData, deadline: text })}
+              keyboardType="numeric"
             />
           </View>
+          <Text style={styles.suggestion}>
+            How many days from now?
+          </Text>
         </View>
       </View>
 
