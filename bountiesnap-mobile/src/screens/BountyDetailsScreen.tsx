@@ -12,7 +12,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuth } from '../context/AuthContext'
-import { getUserWallet, createBountyApplication, getBountyApplications, BountyApplication } from '../utils/supabase'
+import { getUserWallet, createBountyApplication, getBountyApplications, getBountyById, BountyApplication, Bounty } from '../utils/supabase'
 import { applyToBountyOnChain } from '../utils/bountyContract'
 import { extractPrivateKey } from '../utils/walletDebug'
 
@@ -23,19 +23,67 @@ interface BountyDetailsScreenProps {
 
 export default function BountyDetailsScreen({ navigation, route }: BountyDetailsScreenProps) {
   const { user } = useAuth()
-  const { bounty } = route.params
+  const { bounty: passedBounty, bountyId } = route.params
   
+  const [bounty, setBounty] = useState<Bounty | null>(passedBounty || null)
   const [stakeAmount, setStakeAmount] = useState('0.1') // Default stake amount
   const [loading, setLoading] = useState(false)
+  const [loadingBounty, setLoadingBounty] = useState(!passedBounty)
   const [showApplyModal, setShowApplyModal] = useState(false)
   const [applications, setApplications] = useState<BountyApplication[]>([])
   const [loadingApplications, setLoadingApplications] = useState(true)
 
   useEffect(() => {
-    loadApplications()
-  }, [])
+    loadBounty()
+    if (bounty) {
+      loadApplications()
+    }
+  }, [bountyId])
+
+  const loadBounty = async () => {
+    if (passedBounty) {
+      setBounty(passedBounty)
+      setLoadingBounty(false)
+      return
+    }
+
+    if (!bountyId) {
+      Alert.alert('Error', 'No bounty specified')
+      navigation.goBack()
+      return
+    }
+
+    try {
+      setLoadingBounty(true)
+      console.log('🔍 Loading bounty by ID:', bountyId)
+      const loadedBounty = await getBountyById(bountyId)
+      
+      if (!loadedBounty) {
+        Alert.alert('Error', 'Bounty not found')
+        navigation.goBack()
+        return
+      }
+
+      console.log('📄 Loaded bounty:', loadedBounty)
+      setBounty(loadedBounty)
+      
+      // Load applications after bounty is loaded
+      const data = await getBountyApplications(loadedBounty.id)
+      setApplications(data)
+      
+    } catch (error) {
+      console.error('Error loading bounty:', error)
+      Alert.alert('Error', 'Failed to load bounty details')
+      navigation.goBack()
+    } finally {
+      setLoadingBounty(false)
+      setLoadingApplications(false)
+    }
+  }
 
   const loadApplications = async () => {
+    if (!bounty) return
+    
     try {
       setLoadingApplications(true)
       const data = await getBountyApplications(bounty.id)
@@ -70,6 +118,7 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
   }
 
   const isExpired = () => {
+    if (!bounty) return true
     const now = new Date()
     const deadlineDate = new Date(bounty.deadline)
     return deadlineDate.getTime() <= now.getTime()
@@ -80,12 +129,18 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
   }
 
   const canApply = () => {
+    if (!bounty) return false
     return !isExpired() && !hasAlreadyApplied() && bounty.creator_id !== user?.id
   }
 
   const handleApply = async () => {
     if (!user?.id) {
       Alert.alert('Error', 'You must be logged in to apply')
+      return
+    }
+
+    if (!bounty) {
+      Alert.alert('Error', 'Bounty data not available')
       return
     }
 
@@ -211,7 +266,7 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
               <Text style={styles.inputSuffix}>STRK</Text>
             </View>
             <Text style={styles.inputHint}>
-              Recommended: 10-20% of bounty amount ({(bounty.amount_strk * 0.1).toFixed(2)} - {(bounty.amount_strk * 0.2).toFixed(2)} STRK)
+              Recommended: 10-20% of bounty amount ({bounty?.amount_strk ? `${(bounty.amount_strk * 0.1).toFixed(2)} - ${(bounty.amount_strk * 0.2).toFixed(2)} STRK` : 'N/A'})
             </Text>
           </View>
 
@@ -239,6 +294,27 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
       </View>
     </Modal>
   )
+
+  // Show loading state while bounty is being loaded
+  if (loadingBounty || !bounty) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+          >
+            <Ionicons name="arrow-back" size={24} color="#374151" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Bounty Details</Text>
+        </View>
+        <View style={[styles.loadingContainer, { flex: 1, justifyContent: 'center' }]}>
+          <ActivityIndicator size="large" color="#8B5CF6" />
+          <Text style={styles.loadingText}>Loading bounty details...</Text>
+        </View>
+      </View>
+    )
+  }
 
   return (
     <View style={styles.container}>
