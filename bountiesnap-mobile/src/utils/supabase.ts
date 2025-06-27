@@ -153,6 +153,8 @@ export async function createBounty(bountyData: {
       deadline: new Date(bountyData.deadline).toISOString()
     }
 
+    console.log('About to insert bounty record:', JSON.stringify(bountyRecord, null, 2))
+    
     const { data, error } = await supabase
       .from('bounties')
       .insert([bountyRecord])
@@ -161,6 +163,7 @@ export async function createBounty(bountyData: {
 
     if (error) {
       console.error('Error creating bounty:', error)
+      console.error('Error details:', JSON.stringify(error, null, 2))
       throw error
     }
 

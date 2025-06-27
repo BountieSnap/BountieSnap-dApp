@@ -81,20 +81,22 @@ export default function MapScreen({ navigation }: any) {
         showsUserLocation={true}
         showsMyLocationButton={false}
       >
-        {openBounties.map((bounty) => (
-          <Marker
-            key={bounty.id}
-            coordinate={{
-              latitude: bounty.location.lat,
-              longitude: bounty.location.lng,
-            }}
-            onPress={() => handleMarkerPress(bounty)}
-          >
-            <View style={[styles.markerContainer, { backgroundColor: '#EF4444' }]}>
-              <Text style={styles.markerText}>${bounty.payment}</Text>
-            </View>
-          </Marker>
-        ))}
+        {openBounties
+          .filter(bounty => bounty.location && bounty.location.lat && bounty.location.lng)
+          .map((bounty) => (
+            <Marker
+              key={bounty.id}
+              coordinate={{
+                latitude: bounty.location.lat,
+                longitude: bounty.location.lng,
+              }}
+              onPress={() => handleMarkerPress(bounty)}
+            >
+              <View style={[styles.markerContainer, { backgroundColor: '#EF4444' }]}>
+                <Text style={styles.markerText}>${bounty.payment}</Text>
+              </View>
+            </Marker>
+          ))}
       </MapView>
 
       {/* Floating Buttons */}
@@ -135,13 +137,21 @@ export default function MapScreen({ navigation }: any) {
             </TouchableOpacity>
           </View>
           <View style={styles.bountyList}>
-            {openBounties.map((bounty) => (
-              <BountyCard
-                key={bounty.id}
-                bounty={bounty}
-                onAccept={handleAcceptBounty}
-              />
-            ))}
+            {openBounties.length > 0 ? (
+              openBounties.map((bounty) => (
+                <BountyCard
+                  key={bounty.id}
+                  bounty={bounty}
+                  onAccept={handleAcceptBounty}
+                />
+              ))
+            ) : (
+              <View style={{ padding: 20, alignItems: 'center' }}>
+                <Text style={{ fontSize: 16, color: '#6B7280' }}>
+                  No bounties found. Create one to get started!
+                </Text>
+              </View>
+            )}
           </View>
         </SafeAreaView>
       </Modal>
