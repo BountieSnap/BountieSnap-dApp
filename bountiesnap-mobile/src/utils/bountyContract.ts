@@ -224,10 +224,38 @@ export async function applyToBountyOnChain(bountyId: string, stakeAmount: string
     throw new Error('Cavos API key not configured')
   }
 
+  // Convert bounty ID from hex string to felt252 if it starts with 0x
+  let bountyIdFelt = bountyId
+  if (bountyId.startsWith('0x')) {
+    // Already in hex format, use as is for felt252
+    bountyIdFelt = bountyId
+  } else {
+    // Convert string to felt252
+    bountyIdFelt = stringToFelt252(bountyId)
+  }
+
   const [stakeLow, stakeHigh] = amountToU256(stakeAmount)
 
+  console.log('Applying to bounty with params:', {
+    bountyId,
+    bountyIdFelt,
+    stakeAmount,
+    stakeLow,
+    stakeHigh,
+    userAddress
+  })
+
   try {
+    // Check balance before proceeding
+    console.log('Checking STRK balance before applying...')
+    try {
+      await checkStrkBalance(userAddress, userPrivateKey)
+    } catch (balanceError) {
+      console.warn('Could not check balance, proceeding anyway:', balanceError)
+    }
+
     // Step 1: Approve STRK tokens for stake
+    console.log('Step 1: Approving STRK tokens for stake...')
     const approveResult = await callExecuteEndpoint(
       apiKey,
       'sepolia',
@@ -246,7 +274,10 @@ export async function applyToBountyOnChain(bountyId: string, stakeAmount: string
       userPrivateKey
     )
     
+    console.log('STRK approval result:', approveResult)
+    
     // Step 2: Apply to bounty
+    console.log('Step 2: Applying to bounty...')
     const applyResult = await callExecuteEndpoint(
       apiKey,
       'sepolia',
@@ -255,7 +286,7 @@ export async function applyToBountyOnChain(bountyId: string, stakeAmount: string
           contractAddress: BOUNTY_CONTRACT_ADDRESS,
           entrypoint: 'apply_to_bounty',
           calldata: [
-            bountyId,
+            bountyIdFelt,  // Use the properly formatted bounty ID
             stakeLow,
             stakeHigh
           ]
@@ -265,6 +296,8 @@ export async function applyToBountyOnChain(bountyId: string, stakeAmount: string
       userPrivateKey
     )
     
+    console.log('Apply to bounty result:', applyResult)
+    
     return {
       success: true,
       approveTransaction: approveResult,
@@ -272,6 +305,18 @@ export async function applyToBountyOnChain(bountyId: string, stakeAmount: string
     }
   } catch (error) {
     console.error('Error applying to bounty:', error)
+    
+    // Enhanced error handling
+    if (error instanceof Error) {
+      if (error.message.includes('Insufficient STRK balance')) {
+        throw new Error('Insufficient STRK balance. Please add STRK tokens to your wallet from a Sepolia faucet.')
+      } else if (error.message.includes('argent/multicall-failed')) {
+        throw new Error('Transaction failed. This could be due to insufficient balance, insufficient allowance, or contract execution error. Please check your STRK balance and try again.')
+      } else if (error.message.includes('ENTRYPOINT_FAILED')) {
+        throw new Error('Smart contract call failed. Please ensure you have sufficient STRK balance and the bounty is still available for applications.')
+      }
+    }
+    
     throw error
   }
 } 
