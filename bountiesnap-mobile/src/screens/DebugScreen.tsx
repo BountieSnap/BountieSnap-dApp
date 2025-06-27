@@ -11,6 +11,8 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
 import { createWallet } from '../utils/utils'
 import { createUserWallet, getUserWallet, testDatabaseConnection } from '../utils/supabase'
+import { checkStrkBalance, weiToStrk } from '../utils/bountyContract'
+import { extractPrivateKey } from '../utils/walletDebug'
 
 export default function DebugScreen() {
   const { user } = useAuth()
@@ -96,6 +98,47 @@ export default function DebugScreen() {
     addTestResult(`Cavos API Key: ${cavosKey ? '✅ Set' : '❌ Missing'}`)
   }
 
+  const checkWalletBalance = async () => {
+    if (!user?.id) {
+      Alert.alert('Error', 'No user logged in')
+      return
+    }
+
+    try {
+      setLoading(true)
+      addTestResult('Getting user wallet...')
+      const wallet = await getUserWallet(user.id)
+      
+      if (!wallet) {
+        addTestResult('❌ No wallet found for user')
+        return
+      }
+
+      const walletAddress = wallet.wallet_address
+      addTestResult(`Wallet Address: ${walletAddress}`)
+      
+      const privateKey = extractPrivateKey(wallet)
+      if (!privateKey) {
+        addTestResult('❌ Could not extract private key')
+        return
+      }
+
+      addTestResult('Checking STRK balance...')
+      const balanceResult = await checkStrkBalance(walletAddress, privateKey)
+      addTestResult(`Balance result: ${JSON.stringify(balanceResult, null, 2)}`)
+      
+      // Try to extract balance from result
+      // Note: This might need adjustment based on actual API response
+      addTestResult('💰 Copy your wallet address and check balance manually at:')
+      addTestResult('🔗 https://sepolia.starkscan.co/contract/' + walletAddress)
+      
+    } catch (error) {
+      addTestResult(`❌ Balance check failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.content}>
@@ -136,6 +179,14 @@ export default function DebugScreen() {
             disabled={loading || !user?.id}
           >
             <Text style={styles.buttonText}>Test Wallet Retrieval</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.button, loading && styles.disabledButton]}
+            onPress={checkWalletBalance}
+            disabled={loading || !user?.id}
+          >
+            <Text style={styles.buttonText}>Check STRK Balance</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

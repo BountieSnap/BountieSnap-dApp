@@ -132,10 +132,18 @@ export default function CreateBountyScreen({ navigation }: any) {
 
     } catch (error) {
       console.error('Error creating bounty:', error);
-      Alert.alert(
-        'Error', 
-        'Failed to create bounty: ' + (error instanceof Error ? error.message : 'Unknown error')
-      );
+      
+      let errorMessage = 'Failed to create bounty. Please try again.';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('Insufficient STRK balance')) {
+          errorMessage = `🪙 Insufficient STRK Balance!\n\nYour wallet doesn't have enough STRK tokens to create this bounty.\n\n💡 Get test STRK tokens from:\n• Starknet Sepolia Faucet\n• StarkGate Testnet Bridge\n\nUse the Debug Screen to check your wallet address.`;
+        } else {
+          errorMessage = 'Failed to create bounty: ' + error.message;
+        }
+      }
+      
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }

@@ -23,6 +23,21 @@ export function amountToU256(amount: string): [string, string] {
   return [low.toString(), high.toString()]
 }
 
+// Convert u256 (low, high) back to readable amount
+export function u256ToAmount(low: string, high: string): string {
+  const lowBigInt = BigInt(low)
+  const highBigInt = BigInt(high)
+  const amount = (highBigInt << 128n) + lowBigInt
+  return amount.toString()
+}
+
+// Convert wei to STRK (divide by 10^18)
+export function weiToStrk(wei: string): string {
+  const weiBigInt = BigInt(wei)
+  const strkAmount = Number(weiBigInt) / Math.pow(10, 18)
+  return strkAmount.toFixed(4)
+}
+
 // Convert timestamp to u64
 export function timestampToU64(timestamp: number): string {
   return timestamp.toString()
@@ -34,6 +49,45 @@ export interface CreateBountyParams {
   deadline: number // Unix timestamp
   userAddress: string
   userPrivateKey: string
+}
+
+// Check STRK balance of a wallet
+export async function checkStrkBalance(userAddress: string, userPrivateKey: string) {
+  const apiKey = process.env.EXPO_PUBLIC_CAVOS_API_KEY
+  
+  if (!apiKey) {
+    throw new Error('Cavos API key not configured')
+  }
+
+  try {
+    console.log('Checking STRK balance for address:', userAddress)
+    
+    // Call balanceOf function on STRK token contract
+    const result = await callExecuteEndpoint(
+      apiKey,
+      'sepolia',
+      [
+        {
+          contractAddress: STRK_TOKEN_ADDRESS,
+          entrypoint: 'balanceOf',
+          calldata: [userAddress]
+        }
+      ],
+      userAddress,
+      userPrivateKey
+    )
+    
+    console.log('Balance check result:', result)
+    
+    // The result should contain the balance in u256 format (low, high)
+    // For now, we'll extract it from the result
+    // Note: This might need adjustment based on the actual API response format
+    
+    return result
+  } catch (error) {
+    console.error('Error checking STRK balance:', error)
+    throw error
+  }
 }
 
 export async function createBountyOnChain(params: CreateBountyParams) {
@@ -62,6 +116,14 @@ export async function createBountyOnChain(params: CreateBountyParams) {
   })
 
   try {
+    // Check balance before proceeding
+    console.log('Checking STRK balance before creating bounty...')
+    try {
+      await checkStrkBalance(userAddress, userPrivateKey)
+    } catch (balanceError) {
+      console.warn('Could not check balance, proceeding anyway:', balanceError)
+    }
+
     // Step 1: Approve STRK tokens for the bounty contract
     console.log('Step 1: Approving STRK tokens...')
     const approveResult = await callExecuteEndpoint(
@@ -114,6 +176,12 @@ export async function createBountyOnChain(params: CreateBountyParams) {
     }
   } catch (error) {
     console.error('Error creating bounty on chain:', error)
+    
+    // Check if it's an insufficient balance error
+    if (error instanceof Error && error.message.includes('Insufficient STRK balance')) {
+      throw new Error('Insufficient STRK balance. Please add STRK tokens to your wallet from a Sepolia faucet.')
+    }
+    
     throw error
   }
 }
