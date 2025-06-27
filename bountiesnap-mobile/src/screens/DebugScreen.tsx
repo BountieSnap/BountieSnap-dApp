@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
 import { createWallet } from '../utils/utils'
-import { createUserWallet, getUserWallet, testDatabaseConnection } from '../utils/supabase'
+import { createUserWallet, getUserWallet, testDatabaseConnection, supabase, createBounty } from '../utils/supabase'
 import { checkStrkBalance, weiToStrk } from '../utils/bountyContract'
 import { extractPrivateKey } from '../utils/walletDebug'
 
@@ -24,17 +24,46 @@ export default function DebugScreen({ navigation }: any) {
   }
 
   const testDatabase = async () => {
+    setLoading(true)
     try {
-      setLoading(true)
-      addTestResult('Testing database connection...')
-      const result = await testDatabaseConnection()
-      if (result.success) {
-        addTestResult('✅ Database connection successful')
+      console.log('🔍 Testing database connection...')
+      
+      // Test 1: Basic connection
+      const { data: authData, error: authError } = await supabase.auth.getUser()
+      console.log('📊 Auth test:', authData, authError)
+      
+      // Test 2: Check if bounties table exists
+      const { data: bountiesData, error: bountiesError } = await supabase
+        .from('bounties')
+        .select('id')
+        .limit(1)
+      
+      console.log('📊 Bounties table test:', { bountiesData, bountiesError })
+      
+      // Test 3: Check if user_wallets table exists
+      const { data: walletsData, error: walletsError } = await supabase
+        .from('user_wallets')
+        .select('id')
+        .limit(1)
+      
+      console.log('📊 User wallets table test:', { walletsData, walletsError })
+      
+      if (bountiesError) {
+        Alert.alert(
+          'Database Error', 
+          `Bounties table issue: ${bountiesError.message}\n\nCode: ${bountiesError.code}\n\nHint: ${bountiesError.hint || 'Run the SQL schema in Supabase'}`,
+          [{ text: 'OK' }]
+        )
       } else {
-        addTestResult(`❌ Database connection failed: ${JSON.stringify(result.error)}`)
+        Alert.alert(
+          'Database Test Results', 
+          `✅ Auth: ${authData?.user ? 'Connected' : 'Not connected'}\n✅ Bounties table: Found ${bountiesData?.length || 0} records\n✅ Wallets table: Found ${walletsData?.length || 0} records`,
+          [{ text: 'OK' }]
+        )
       }
     } catch (error) {
-      addTestResult(`❌ Database test error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      console.error('Database test error:', error)
+      Alert.alert('Error', `Database test failed: ${error}`)
     } finally {
       setLoading(false)
     }
@@ -139,6 +168,42 @@ export default function DebugScreen({ navigation }: any) {
     }
   }
 
+  const checkBalance = async () => {
+    setLoading(true)
+    try {
+      if (!user?.id) {
+        Alert.alert('Error', 'Please log in first')
+        return
+      }
+
+      const userWallet = await getUserWallet(user.id)
+      if (!userWallet) {
+        Alert.alert('Error', 'No wallet found')
+        return
+      }
+
+      const privateKey = extractPrivateKey(userWallet)
+      if (!privateKey) {
+        Alert.alert('Error', 'Could not extract private key')
+        return
+      }
+
+      const balance = await checkStrkBalance(userWallet.wallet_address, privateKey)
+      const strkBalance = weiToStrk(balance)
+      
+      Alert.alert(
+        'STRK Balance', 
+        `Address: ${userWallet.wallet_address}\n\nBalance: ${Number(strkBalance).toFixed(4)} STRK\n\nRaw: ${balance} wei`,
+        [{ text: 'OK' }]
+      )
+    } catch (error) {
+      console.error('Balance check error:', error)
+      Alert.alert('Error', `Failed to check balance: ${error}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.content}>
@@ -187,6 +252,14 @@ export default function DebugScreen({ navigation }: any) {
             disabled={loading || !user?.id}
           >
             <Text style={styles.buttonText}>Check STRK Balance</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.button, loading && styles.disabledButton]}
+            onPress={testDatabase}
+            disabled={loading}
+          >
+            <Text style={styles.buttonText}>🔍 Test Database Tables</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

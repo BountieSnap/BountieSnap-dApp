@@ -18,6 +18,7 @@ import { getUserWallet } from '../utils/supabase';
 import { createBountyOnChain } from '../utils/bountyContract';
 import { debugWalletData, extractPrivateKey, validateWalletForTransaction } from '../utils/walletDebug';
 import { createBounty } from '../utils/supabase';
+import { supabase } from '../utils/supabase';
 
 export default function CreateBountyScreen({ navigation }: any) {
   const { createBounty } = useBounty();
@@ -145,6 +146,22 @@ export default function CreateBountyScreen({ navigation }: any) {
       console.log('Storing bounty in database...');
       console.log('Deadline timestamp (seconds):', deadlineTimestamp);
       console.log('Deadline timestamp (milliseconds):', deadlineTimestamp * 1000);
+      
+      // TEST: Check if we can access the bounties table first
+      console.log('🔍 Testing database access...');
+      try {
+        const testQuery = await supabase.from('bounties').select('id').limit(1);
+        console.log('📊 Bounties table test result:', testQuery);
+        
+        if (testQuery.error) {
+          console.error('❌ Database table access failed:', testQuery.error);
+          throw new Error(`Database access failed: ${testQuery.error.message}`);
+        }
+        console.log('✅ Database access successful');
+      } catch (dbError) {
+        console.error('❌ Database test error:', dbError);
+        throw new Error(`Database connection test failed: ${dbError}`);
+      }
       
       await createBounty({
         creator_id: user!.id,
