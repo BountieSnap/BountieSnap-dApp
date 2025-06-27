@@ -180,7 +180,54 @@ export default function CreateBountyScreen({ navigation }: any) {
       
       console.log('📝 About to create bounty with data:', JSON.stringify(bountyToCreate, null, 2));
       
-      const createdBounty = await createBounty(bountyToCreate);
+      // DIRECT DATABASE CALL TO BYPASS FUNCTION ISSUES
+      console.log('🔄 Making direct database insertion...');
+      
+      let createdBounty;
+      try {
+        // Convert wei to STRK for display
+        const amountBigInt = BigInt(bountyToCreate.amount)
+        const amountStrk = Number(amountBigInt) / Math.pow(10, 18)
+
+        const bountyRecord = {
+          creator_id: bountyToCreate.creator_id,
+          on_chain_id: bountyToCreate.on_chain_id,
+          title: bountyToCreate.title,
+          description: bountyToCreate.description,
+          category: bountyToCreate.category,
+          payment: bountyToCreate.payment,
+          amount: bountyToCreate.amount,
+          amount_strk: amountStrk,
+          location_lat: null,
+          location_lng: null,
+          location_address: bountyToCreate.location_address,
+          deadline: bountyToCreate.deadline,
+          transaction_hash: bountyToCreate.transaction_hash,
+          wallet_address: bountyToCreate.wallet_address,
+          requirements: bountyToCreate.requirements,
+          status: 'open'
+        }
+
+        console.log('🔄 Direct insertion record:', JSON.stringify(bountyRecord, null, 2));
+        
+        const { data: insertData, error: insertError } = await supabase
+          .from('bounties')
+          .insert([bountyRecord])
+          .select()
+          .single()
+
+        if (insertError) {
+          console.error('❌ Direct insertion error:', insertError)
+          console.error('❌ Error details:', JSON.stringify(insertError, null, 2))
+          throw new Error(`Direct DB error: ${insertError.message} (Code: ${insertError.code})`)
+        }
+
+        console.log('✅ Direct insertion successful:', insertData)
+        createdBounty = insertData
+      } catch (directError) {
+        console.error('❌ Direct insertion failed:', directError)
+        throw directError
+      }
       
       console.log('📄 Created bounty result:', createdBounty);
       
