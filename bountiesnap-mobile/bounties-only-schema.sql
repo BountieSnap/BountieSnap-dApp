@@ -1,34 +1,3 @@
--- Create user_wallets table (if it doesn't exist)
-create table if not exists public.user_wallets (
-  id uuid references auth.users(id) on delete cascade primary key,
-  wallet_address text not null,
-  private_key text,
-  public_key text,
-  wallet_data jsonb not null,
-  network text default 'sepolia',
-  created_at timestamp with time zone default now(),
-  updated_at timestamp with time zone default now()
-);
-
--- Create RLS policies for user_wallets (if they don't exist)
-do $$ 
-begin
-  if not exists (select 1 from pg_policies where tablename = 'user_wallets' and policyname = 'Users can view their own wallet') then
-    create policy "Users can view their own wallet" on public.user_wallets
-      for select using (auth.uid() = id);
-  end if;
-  
-  if not exists (select 1 from pg_policies where tablename = 'user_wallets' and policyname = 'Users can insert their own wallet') then
-    create policy "Users can insert their own wallet" on public.user_wallets
-      for insert with check (auth.uid() = id);
-  end if;
-  
-  if not exists (select 1 from pg_policies where tablename = 'user_wallets' and policyname = 'Users can update their own wallet') then
-    create policy "Users can update their own wallet" on public.user_wallets
-      for update using (auth.uid() = id);
-  end if;
-end $$;
-
 -- Create bounties table
 create table if not exists public.bounties (
   id uuid default gen_random_uuid() primary key,
@@ -88,26 +57,5 @@ create index if not exists idx_bounty_applications_bounty on public.bounty_appli
 create index if not exists idx_bounty_applications_hunter on public.bounty_applications(hunter_id);
 
 -- Enable RLS on new tables
-alter table public.user_wallets enable row level security;
 alter table public.bounties enable row level security;
-alter table public.bounty_applications enable row level security;
-
--- Create updated_at trigger
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
-
-CREATE TRIGGER update_user_wallets_updated_at
-    BEFORE UPDATE ON user_wallets
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
-
--- Optional: Create an index on wallet_address for faster lookups
-CREATE INDEX idx_user_wallets_address ON user_wallets(wallet_address);
-
--- Optional: Create an index on network
-CREATE INDEX idx_user_wallets_network ON user_wallets(network); 
+alter table public.bounty_applications enable row level security; 

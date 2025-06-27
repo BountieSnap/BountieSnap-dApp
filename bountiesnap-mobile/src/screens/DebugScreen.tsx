@@ -14,7 +14,7 @@ import { createUserWallet, getUserWallet, testDatabaseConnection } from '../util
 import { checkStrkBalance, weiToStrk } from '../utils/bountyContract'
 import { extractPrivateKey } from '../utils/walletDebug'
 
-export default function DebugScreen() {
+export default function DebugScreen({ navigation }: any) {
   const { user } = useAuth()
   const [loading, setLoading] = useState(false)
   const [testResults, setTestResults] = useState<string[]>([])
@@ -187,6 +187,13 @@ export default function DebugScreen() {
             disabled={loading || !user?.id}
           >
             <Text style={styles.buttonText}>Check STRK Balance</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => navigation?.navigate('BountiesList')}
+          >
+            <Text style={styles.buttonText}>Browse Bounties</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

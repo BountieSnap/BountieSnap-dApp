@@ -14,7 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useBounty } from '../context/BountyContext';
 import BountyCard from '../components/BountyCard';
 
-export default function TasksScreen() {
+export default function TasksScreen({ navigation }: any) {
   const { userTasks, completeTask } = useBounty();
   const [activeTab, setActiveTab] = useState<'active' | 'completed' | 'posted'>('active');
 
@@ -88,7 +88,16 @@ export default function TasksScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>My Tasks</Text>
+        <View style={styles.headerTop}>
+          <Text style={styles.title}>My Tasks</Text>
+          <TouchableOpacity
+            style={styles.browseButton}
+            onPress={() => navigation.navigate('BountiesList')}
+          >
+            <Ionicons name="search-outline" size={20} color="#8B5CF6" />
+            <Text style={styles.browseButtonText}>Browse</Text>
+          </TouchableOpacity>
+        </View>
         
         {/* Tabs */}
         <View style={styles.tabContainer}>
@@ -165,11 +174,30 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#111827',
-    marginBottom: 16,
+  },
+  browseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  browseButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#8B5CF6',
+    marginLeft: 4,
   },
   tabContainer: {
     flexDirection: 'row',

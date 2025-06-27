@@ -11,6 +11,8 @@ import TasksScreen from './src/screens/TasksScreen';
 import AchievementsScreen from './src/screens/AchievementsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import CreateBountyScreen from './src/screens/CreateBountyScreen';
+import BountiesListScreen from './src/screens/BountiesListScreen';
+import BountyDetailsScreen from './src/screens/BountyDetailsScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
 import LoadingScreen from './src/screens/LoadingScreen';
@@ -88,6 +90,16 @@ function AppNavigator() {
             name="CreateBounty" 
             component={CreateBountyScreen}
             options={{ presentation: 'modal' }}
+          />
+          <Stack.Screen 
+            name="BountiesList" 
+            component={BountiesListScreen}
+            options={{ headerShown: true, title: 'Available Bounties' }}
+          />
+          <Stack.Screen 
+            name="BountyDetails" 
+            component={BountyDetailsScreen}
+            options={{ headerShown: false }}
           />
         </Stack.Navigator>
       ) : (

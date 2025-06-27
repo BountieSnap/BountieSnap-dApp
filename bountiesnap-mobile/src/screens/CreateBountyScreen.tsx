@@ -17,6 +17,7 @@ import { useAuth } from '../context/AuthContext';
 import { getUserWallet } from '../utils/supabase';
 import { createBountyOnChain } from '../utils/bountyContract';
 import { debugWalletData, extractPrivateKey, validateWalletForTransaction } from '../utils/walletDebug';
+import { createBounty } from '../utils/supabase';
 
 export default function CreateBountyScreen({ navigation }: any) {
   const { createBounty } = useBounty();
@@ -118,13 +119,33 @@ export default function CreateBountyScreen({ navigation }: any) {
 
       console.log('Bounty created on chain:', result);
 
-      // Create bounty in local context (for UI)
-      createBounty(bountyData);
+      // Extract transaction hash from the result
+      const transactionHash = result.createBountyTransaction?.result?.transactionHash;
+      if (!transactionHash) {
+        throw new Error('No transaction hash returned from bounty creation');
+      }
+
+      // For now, use transaction hash as on-chain ID (in production, extract from events)
+      const onChainId = transactionHash;
+
+      // Store bounty in Supabase database
+      console.log('Storing bounty in database...');
+      await createBounty({
+        creator_id: user!.id,
+        on_chain_id: onChainId,
+        title: bountyData.title.trim(),
+        description: bountyData.description.trim(),
+        amount: amountInWei,
+        deadline: new Date(deadlineTimestamp).toISOString(),
+        transaction_hash: transactionHash,
+        wallet_address: userWallet.wallet_address
+      });
+
+      console.log('Bounty stored in database successfully!');
 
       Alert.alert(
-        'Success!', 
-        'Bounty created successfully on the blockchain!\n\nTransaction hash: ' + 
-        (result.createBountyTransaction?.transaction_hash || 'Pending'),
+        'Success! 🎉', 
+        `Bounty created successfully!\n\nTitle: ${bountyData.title}\nAmount: ${bountyData.payment} STRK\nDeadline: ${bountyData.deadline}\n\nTransaction: ${transactionHash}`,
         [
           { text: 'OK', onPress: () => navigation.goBack() }
         ]
