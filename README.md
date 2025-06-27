@@ -56,6 +56,7 @@ BountieSnap connects neighbors through crypto-powered micro-tasks. Need grocerie
 - **Framework**: Starknet Foundry
 - **Network**: Starknet Sepolia
 - **Standards**: ERC-721 (NFTs), ERC-20 (Tokens)
+- **Cavos**: Wallet deploy
 
 ### Development Tools
 - **AI Coding**: Cursor IDE + Cairo Coder
