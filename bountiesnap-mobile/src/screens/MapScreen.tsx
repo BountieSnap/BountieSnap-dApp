@@ -15,16 +15,16 @@ import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useBounty } from '../context/BountyContext';
-import BountyCard from '../components/BountyCard';
+import { getBounties } from '../utils/supabase';
 
 const { width, height } = Dimensions.get('window');
 
 export default function MapScreen({ navigation }: any) {
-  const { bounties, acceptBounty } = useBounty();
+  const [bounties, setBounties] = useState<any[]>([]);
   const [location, setLocation] = useState<any>(null);
   const [selectedBounty, setSelectedBounty] = useState<any>(null);
   const [showBountyList, setShowBountyList] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -37,18 +37,35 @@ export default function MapScreen({ navigation }: any) {
       let location = await Location.getCurrentPositionAsync({});
       setLocation(location);
     })();
+
+    // Load bounties from database
+    loadBounties();
   }, []);
 
-  const openBounties = bounties.filter(b => b.status === 'open');
+  const loadBounties = async () => {
+    try {
+      setLoading(true);
+      const dbBounties = await getBounties('open');
+      console.log('📍 Loaded bounties for map:', dbBounties.length);
+      setBounties(dbBounties);
+    } catch (error) {
+      console.error('Error loading bounties for map:', error);
+      Alert.alert('Error', 'Failed to load bounties');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openBounties = bounties.filter((bounty: any) => bounty.status === 'open');
 
   const handleMarkerPress = (bounty: any) => {
     setSelectedBounty(bounty);
   };
 
   const handleAcceptBounty = (bountyId: string) => {
-    acceptBounty(bountyId);
+    // Navigate to bounty details for acceptance
+    navigation.navigate('BountyDetails', { bountyId });
     setSelectedBounty(null);
-    Alert.alert('Success', 'Bounty accepted successfully!');
   };
 
   return (
@@ -82,18 +99,18 @@ export default function MapScreen({ navigation }: any) {
         showsMyLocationButton={false}
       >
         {openBounties
-          .filter(bounty => bounty.location && bounty.location.lat && bounty.location.lng)
-          .map((bounty) => (
+          .filter((bounty: any) => bounty.location_lat && bounty.location_lng)
+          .map((bounty: any) => (
             <Marker
               key={bounty.id}
               coordinate={{
-                latitude: bounty.location.lat,
-                longitude: bounty.location.lng,
+                latitude: bounty.location_lat,
+                longitude: bounty.location_lng,
               }}
               onPress={() => handleMarkerPress(bounty)}
             >
               <View style={[styles.markerContainer, { backgroundColor: '#EF4444' }]}>
-                <Text style={styles.markerText}>${bounty.payment}</Text>
+                <Text style={styles.markerText}>{bounty.amount_strk?.toFixed(1) || '0'} STRK</Text>
               </View>
             </Marker>
           ))}
@@ -138,17 +155,27 @@ export default function MapScreen({ navigation }: any) {
           </View>
           <View style={styles.bountyList}>
             {openBounties.length > 0 ? (
-              openBounties.map((bounty) => (
-                <BountyCard
+              openBounties.map((bounty: any) => (
+                <TouchableOpacity
                   key={bounty.id}
-                  bounty={bounty}
-                  onAccept={handleAcceptBounty}
-                />
+                  style={styles.simpleBountyCard}
+                  onPress={() => navigation.navigate('BountyDetails', { bountyId: bounty.id })}
+                >
+                  <View style={styles.bountyHeader}>
+                    <Text style={styles.bountyTitle}>{bounty.title}</Text>
+                    <Text style={styles.bountyAmount}>{bounty.amount_strk?.toFixed(2) || '0'} STRK</Text>
+                  </View>
+                  <Text style={styles.bountyDescription} numberOfLines={2}>{bounty.description}</Text>
+                  <View style={styles.bountyFooter}>
+                    <Text style={styles.bountyCategory}>{bounty.category}</Text>
+                    <Text style={styles.bountyLocation}>{bounty.location_address || 'Location TBD'}</Text>
+                  </View>
+                </TouchableOpacity>
               ))
             ) : (
               <View style={{ padding: 20, alignItems: 'center' }}>
                 <Text style={{ fontSize: 16, color: '#6B7280' }}>
-                  No bounties found. Create one to get started!
+                  {loading ? 'Loading bounties...' : 'No bounties found. Create one to get started!'}
                 </Text>
               </View>
             )}
@@ -172,10 +199,29 @@ export default function MapScreen({ navigation }: any) {
           </View>
           {selectedBounty && (
             <View style={styles.selectedBountyContainer}>
-              <BountyCard
-                bounty={selectedBounty}
-                onAccept={handleAcceptBounty}
-              />
+              <View style={styles.simpleBountyCard}>
+                <View style={styles.bountyHeader}>
+                  <Text style={styles.bountyTitle}>{selectedBounty.title}</Text>
+                  <Text style={styles.bountyAmount}>{selectedBounty.amount_strk?.toFixed(2) || '0'} STRK</Text>
+                </View>
+                <Text style={styles.bountyDescription}>{selectedBounty.description}</Text>
+                <View style={styles.bountyFooter}>
+                  <Text style={styles.bountyCategory}>{selectedBounty.category}</Text>
+                  <Text style={styles.bountyLocation}>{selectedBounty.location_address || 'Location TBD'}</Text>
+                </View>
+                <TouchableOpacity
+                  style={{ 
+                    backgroundColor: '#8B5CF6', 
+                    padding: 12, 
+                    borderRadius: 8, 
+                    marginTop: 12, 
+                    alignItems: 'center' 
+                  }}
+                  onPress={() => handleAcceptBounty(selectedBounty.id)}
+                >
+                  <Text style={{ color: 'white', fontWeight: '600' }}>View Details</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
         </SafeAreaView>
@@ -298,5 +344,53 @@ const styles = StyleSheet.create({
   },
   selectedBountyContainer: {
     padding: 16,
+  },
+  simpleBountyCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  bountyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  bountyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    flex: 1,
+  },
+  bountyAmount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#10B981',
+  },
+  bountyDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  bountyFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  bountyCategory: {
+    fontSize: 12,
+    color: '#8B5CF6',
+    fontWeight: '500',
+    textTransform: 'capitalize',
+  },
+  bountyLocation: {
+    fontSize: 12,
+    color: '#9CA3AF',
   },
 });
