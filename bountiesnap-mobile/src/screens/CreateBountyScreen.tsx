@@ -163,7 +163,7 @@ export default function CreateBountyScreen({ navigation }: any) {
         throw new Error(`Database connection test failed: ${dbError}`);
       }
       
-      await createBounty({
+      const bountyToCreate = {
         creator_id: user!.id,
         on_chain_id: onChainId,
         title: bountyData.title.trim(),
@@ -172,9 +172,25 @@ export default function CreateBountyScreen({ navigation }: any) {
         deadline: new Date(deadlineTimestamp * 1000).toISOString(), // Convert seconds to milliseconds
         transaction_hash: transactionHash,
         wallet_address: userWallet.wallet_address
-      });
-
-      console.log('Bounty stored in database successfully!');
+      };
+      
+      console.log('📝 About to create bounty with data:', JSON.stringify(bountyToCreate, null, 2));
+      
+      const createdBounty = await createBounty(bountyToCreate);
+      
+      console.log('📄 Created bounty result:', createdBounty);
+      
+      // Quick verification: count total bounties
+      try {
+        const { count } = await supabase
+          .from('bounties')
+          .select('*', { count: 'exact', head: true });
+        console.log('🔍 Total bounties in database after creation:', count);
+      } catch (verifyError) {
+        console.log('🔍 Could not verify bounty count:', verifyError);
+      }
+      
+      console.log('✅ Bounty stored in database successfully!');
 
       Alert.alert(
         'Success! 🎉', 
