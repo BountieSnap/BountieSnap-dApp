@@ -43,12 +43,19 @@ export interface Bounty {
   on_chain_id: string
   title: string
   description: string
+  category?: string
+  payment?: number // Payment amount in STRK for display
   amount: string // Amount in wei
   amount_strk?: number // Amount in STRK for display
+  location_lat?: number
+  location_lng?: number
+  location_address?: string
   deadline: string
-  status: 'open' | 'in_progress' | 'completed' | 'cancelled'
+  status: 'open' | 'accepted' | 'in_progress' | 'completed' | 'cancelled'
   transaction_hash: string
   wallet_address: string
+  requirements?: string[]
+  proof_image?: string
   created_at: string
   updated_at: string
 }
@@ -141,19 +148,40 @@ export async function createBounty(bountyData: {
   deadline: string
   transaction_hash: string
   wallet_address: string
+  category?: string
+  payment?: number
+  location_lat?: number
+  location_lng?: number
+  location_address?: string
+  requirements?: string[]
 }): Promise<Bounty> {
   try {
+    console.log('🔧 createBounty function called with:', JSON.stringify(bountyData, null, 2))
+    
     // Convert wei to STRK for display
     const amountBigInt = BigInt(bountyData.amount)
     const amountStrk = Number(amountBigInt) / Math.pow(10, 18)
 
     const bountyRecord = {
-      ...bountyData,
+      creator_id: bountyData.creator_id,
+      on_chain_id: bountyData.on_chain_id,
+      title: bountyData.title,
+      description: bountyData.description,
+      category: bountyData.category || 'other',
+      payment: bountyData.payment || amountStrk,
+      amount: bountyData.amount,
       amount_strk: amountStrk,
-      deadline: new Date(bountyData.deadline).toISOString()
+      location_lat: bountyData.location_lat || null,
+      location_lng: bountyData.location_lng || null,
+      location_address: bountyData.location_address || null,
+      deadline: bountyData.deadline,
+      transaction_hash: bountyData.transaction_hash,
+      wallet_address: bountyData.wallet_address,
+      requirements: bountyData.requirements || [],
+      status: 'open'
     }
 
-    console.log('About to insert bounty record:', JSON.stringify(bountyRecord, null, 2))
+    console.log('🔧 Prepared bounty record for insertion:', JSON.stringify(bountyRecord, null, 2))
     
     const { data, error } = await supabase
       .from('bounties')
@@ -162,16 +190,25 @@ export async function createBounty(bountyData: {
       .single()
 
     if (error) {
-      console.error('Error creating bounty:', error)
-      console.error('Error details:', JSON.stringify(error, null, 2))
-      throw error
+      console.error('❌ Database insertion error:', error)
+      console.error('❌ Error details:', JSON.stringify(error, null, 2))
+      throw new Error(`Database error: ${error.message} (Code: ${error.code})`)
     }
 
-    console.log('Bounty stored successfully:', data)
+    if (!data) {
+      console.error('❌ No data returned from insertion')
+      throw new Error('No data returned from database insertion')
+    }
+
+    console.log('✅ Bounty stored successfully in database:', data)
     return data
   } catch (error) {
-    console.error('Error storing bounty:', error)
-    throw error
+    console.error('❌ createBounty function error:', error)
+    if (error instanceof Error) {
+      throw error
+    } else {
+      throw new Error(`Unknown error: ${String(error)}`)
+    }
   }
 }
 

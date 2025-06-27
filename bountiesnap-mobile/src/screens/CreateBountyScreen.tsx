@@ -168,10 +168,14 @@ export default function CreateBountyScreen({ navigation }: any) {
         on_chain_id: onChainId,
         title: bountyData.title.trim(),
         description: bountyData.description.trim(),
+        category: bountyData.category,
+        payment: bountyData.payment,
         amount: amountInWei,
         deadline: new Date(deadlineTimestamp * 1000).toISOString(), // Convert seconds to milliseconds
         transaction_hash: transactionHash,
-        wallet_address: userWallet.wallet_address
+        wallet_address: userWallet.wallet_address,
+        location_address: bountyData.location || null,
+        requirements: ['Photo proof of completion'] // Default requirement
       };
       
       console.log('📝 About to create bounty with data:', JSON.stringify(bountyToCreate, null, 2));
