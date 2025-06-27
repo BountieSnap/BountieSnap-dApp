@@ -13,13 +13,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { useBounty } from '../context/BountyContext';
-import { useContract } from '../hooks/useContract';
-import { CreateBountyParams } from '../contracts/BountyContract';
+import { useAuth } from '../context/AuthContext';
+import { getUserWallet } from '../utils/supabase';
+import { createBountyOnChain } from '../utils/bountyContract';
+import { debugWalletData, extractPrivateKey, validateWalletForTransaction } from '../utils/walletDebug';
 
 export default function CreateBountyScreen({ navigation }: any) {
   const { createBounty } = useBounty();
-  const { createBounty: createContractBounty, loading, error } = useContract();
+  const { user } = useAuth();
   const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
   const [bountyData, setBountyData] = useState({
     title: '',
     description: '',
@@ -47,50 +50,94 @@ export default function CreateBountyScreen({ navigation }: any) {
   };
 
   const handleSubmit = async () => {
+    if (!user?.id) {
+      Alert.alert('Error', 'You must be logged in to create a bounty');
+      return;
+    }
+
+    if (!bountyData.title || !bountyData.description || !bountyData.payment || !bountyData.deadline) {
+      Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
+
+    setLoading(true);
+
     try {
-      // Validate required fields
-      if (!bountyData.title || !bountyData.description || !bountyData.payment || !bountyData.deadline) {
-        Alert.alert('Error', 'Please fill in all required fields');
+      // Get user wallet from database
+      console.log('Getting user wallet from database...');
+      const userWallet = await getUserWallet(user.id);
+      
+      if (!userWallet || !userWallet.wallet_data) {
+        Alert.alert('Error', 'No wallet found. Please contact support.');
+        setLoading(false);
         return;
       }
 
-      // Parse deadline to timestamp (assuming deadline is in format "MM/DD/YYYY" or similar)
-      const deadlineTimestamp = Math.floor(Date.now() / 1000) + (24 * 60 * 60); // Default: 24 hours from now
+      // Debug wallet data structure
+      debugWalletData(userWallet);
       
-      // Prepare contract parameters
-      const contractParams: CreateBountyParams = {
-        description: `${bountyData.title}: ${bountyData.description}`, // Combine title and description
-        amount: bountyData.payment.toString(), // Amount in STRK
-        deadline: deadlineTimestamp
-      };
+      // Validate wallet for transaction
+      const validation = validateWalletForTransaction(userWallet);
+      if (!validation.isValid) {
+        Alert.alert('Error', `Wallet validation failed: ${validation.error}`);
+        setLoading(false);
+        return;
+      }
 
-      console.log('Creating bounty on blockchain with params:', contractParams);
-
-      // Create bounty on the smart contract
-      const result = await createContractBounty(contractParams);
+      console.log('User wallet found:', userWallet.wallet_address);
       
-      console.log('Smart contract result:', result);
+      // Extract private key
+      const privateKey = extractPrivateKey(userWallet);
+      if (!privateKey) {
+        Alert.alert('Error', 'Could not extract private key from wallet data.');
+        setLoading(false);
+        return;
+      }
 
-      // Also create locally for UI
-      createBounty({
-        ...bountyData,
-        contractBountyId: result.bountyId,
-        txHash: result.txHash,
+      // Convert payment to wei (STRK has 18 decimals)
+      const amountInWei = (bountyData.payment * Math.pow(10, 18)).toString();
+      
+      // Convert deadline to Unix timestamp (assuming deadline is in days from now)
+      const deadlineTimestamp = Math.floor(Date.now() / 1000) + (parseInt(bountyData.deadline) * 24 * 60 * 60);
+
+      console.log('Creating bounty on chain with:', {
+        description: bountyData.description,
+        amount: amountInWei,
+        deadline: deadlineTimestamp,
+        address: userWallet.wallet_address
       });
+
+      // Create bounty on chain
+      const result = await createBountyOnChain({
+        description: bountyData.description,
+        amount: amountInWei,
+        deadline: deadlineTimestamp,
+        userAddress: userWallet.wallet_address,
+        userPrivateKey: privateKey
+      });
+
+      console.log('Bounty created on chain:', result);
+
+      // Create bounty in local context (for UI)
+      createBounty(bountyData);
 
       Alert.alert(
         'Success!', 
-        `Bounty created successfully!\n\nBounty ID: ${result.bountyId}\nTransaction: ${result.txHash?.slice(0, 10)}...`,
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
+        'Bounty created successfully on the blockchain!\n\nTransaction hash: ' + 
+        (result.createBountyTransaction?.transaction_hash || 'Pending'),
+        [
+          { text: 'OK', onPress: () => navigation.goBack() }
+        ]
       );
 
     } catch (error) {
       console.error('Error creating bounty:', error);
       Alert.alert(
         'Error', 
-        error instanceof Error ? error.message : 'Failed to create bounty. Please try again.',
-        [{ text: 'OK' }]
+        'Failed to create bounty: ' + (error instanceof Error ? error.message : 'Unknown error')
       );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -311,14 +358,14 @@ export default function CreateBountyScreen({ navigation }: any) {
         <TouchableOpacity
           style={[styles.nextButton, step === 1 && styles.fullWidthButton]}
           onPress={step === 3 ? handleSubmit : handleNext}
-          disabled={(step === 1 && (!bountyData.title || !bountyData.description)) || (step === 3 && loading)}
+          disabled={loading || (step === 1 && (!bountyData.title || !bountyData.description))}
         >
           <LinearGradient
-            colors={['#8B5CF6', '#3B82F6']}
+            colors={loading ? ['#9CA3AF', '#6B7280'] : ['#8B5CF6', '#3B82F6']}
             style={styles.nextButtonGradient}
           >
             <Text style={styles.nextButtonText}>
-              {step === 3 && loading ? 'Creating on Blockchain...' : (step === 3 ? 'Create Bounty' : 'Next')}
+              {loading ? 'Creating Bounty...' : (step === 3 ? 'Create Bounty' : 'Next')}
             </Text>
           </LinearGradient>
         </TouchableOpacity>
