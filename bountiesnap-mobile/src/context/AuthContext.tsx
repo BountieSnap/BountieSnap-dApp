@@ -33,6 +33,30 @@ interface AuthProviderProps {
   children: React.ReactNode
 }
 
+// Helper function to create wallet with retry logic for foreign key constraint
+const createUserWalletWithRetry = async (userId: string, walletData: any, maxRetries = 3, delay = 1000) => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Attempting to create wallet (attempt ${attempt}/${maxRetries})`)
+      await createUserWallet(userId, walletData)
+      return // Success, exit the function
+    } catch (error: any) {
+      console.log(`Wallet creation attempt ${attempt} failed:`, error?.message)
+      
+      // If it's a foreign key constraint error and we haven't exhausted retries
+      if (error?.code === '23503' && attempt < maxRetries) {
+        console.log(`Waiting ${delay}ms before retry...`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        delay *= 1.5 // Exponential backoff
+        continue
+      }
+      
+      // If it's not a foreign key error or we've exhausted retries, throw the error
+      throw error
+    }
+  }
+}
+
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
@@ -79,8 +103,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           console.log('Creating wallet for user:', authData.user.id)
           const walletData = await createWallet('sepolia')
           
-          // Store wallet data in Supabase
-          await createUserWallet(authData.user.id, walletData)
+          // Store wallet data in Supabase with retry logic
+          await createUserWalletWithRetry(authData.user.id, walletData)
           
           console.log('Wallet created successfully for user:', authData.user.id)
         } catch (walletError) {
