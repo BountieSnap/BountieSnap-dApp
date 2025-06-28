@@ -14,12 +14,6 @@
     "assetBundlePatterns": [
       "**/*"
     ],
-    "extra": {
-      "EXPO_PUBLIC_SUPABASE_URL": "https://qutodujlcfqtndnvxuqh.supabase.co",
-      "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1dG9kdWpsY2ZxdG5kbnZ4dXFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA5Nzc4MDMsImV4cCI6MjA2NjU1MzgwM30.Vclgi0hu5JKA6oFNTEtuRD5JyWYA6D5ggvbTLZzSMrg",
-      "CAVOS_API_KEY": "cavos-b0129072017d10bf3a6330e8",
-      "CAVOS_HASH_SECRET": "hs-7fd038bc0eb006ad06426d68d48"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.bountiesnap.app"
