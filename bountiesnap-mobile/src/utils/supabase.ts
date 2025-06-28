@@ -1,12 +1,22 @@
 import 'react-native-url-polyfill/auto'
 import { createClient } from '@supabase/supabase-js'
+import Constants from 'expo-constants'
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!
-const supabaseServiceKey = process.env.EXPO_PUBLIC_SUPABASE_SERVICE_KEY!
+// Get environment variables from process.env or app.json extra config as fallback
+const getEnvVar = (key: string): string => {
+  return process.env[key] || Constants.expoConfig?.extra?.[key] || ''
+}
 
-if (!process.env.EXPO_PUBLIC_SUPABASE_URL || !process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) {
+const supabaseUrl = getEnvVar('EXPO_PUBLIC_SUPABASE_URL')
+const supabaseAnonKey = getEnvVar('EXPO_PUBLIC_SUPABASE_ANON_KEY')
+const supabaseServiceKey = getEnvVar('EXPO_PUBLIC_SUPABASE_SERVICE_KEY')
+
+if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('⚠️  Supabase environment variables not found. Please create a .env file with EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY')
+  console.warn(`URL: ${supabaseUrl ? '✅ Set' : '❌ Missing'}`)
+  console.warn(`Key: ${supabaseAnonKey ? '✅ Set' : '❌ Missing'}`)
+} else {
+  console.log('✅ Supabase configuration loaded successfully')
 }
 
 // Regular client for normal operations
