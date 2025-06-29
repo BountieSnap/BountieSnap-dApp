@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../context/AuthContext'
 import { createWallet } from '../utils/utils'
 import { createUserWallet, getUserWallet, testDatabaseConnection, supabase, createBounty } from '../utils/supabase'
-import { checkStrkBalance, weiToStrk } from '../utils/bountyContract'
+import { checkStrkBalance, weiToStrk } from '../utils/bountyContractFixed'
 import { extractPrivateKey } from '../utils/walletDebug'
 
 export default function DebugScreen({ navigation }: any) {

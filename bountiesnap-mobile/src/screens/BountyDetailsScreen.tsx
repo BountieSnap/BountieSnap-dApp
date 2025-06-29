@@ -13,7 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { useAuth } from '../context/AuthContext'
 import { getUserWallet, createBountyApplication, getBountyApplications, getBountyById, BountyApplication, Bounty } from '../utils/supabase'
-import { applyToBountyOnChain } from '../utils/bountyContract'
+import { applyToBountyOnChain } from '../utils/bountyContractFixed'
 import { extractPrivateKey } from '../utils/walletDebug'
 
 interface BountyDetailsScreenProps {

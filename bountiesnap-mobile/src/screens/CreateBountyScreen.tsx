@@ -15,10 +15,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useBounty } from '../context/BountyContext';
 import { useAuth } from '../context/AuthContext';
 import { getUserWallet } from '../utils/supabase';
-import { createBountyOnChain } from '../utils/bountyContract';
 import { debugWalletData, extractPrivateKey, validateWalletForTransaction } from '../utils/walletDebug';
-import { createBounty } from '../utils/supabase';
-import { supabase } from '../utils/supabase';
+import { createBountyWithManagedId } from '../services/bountyService';
 
 export default function CreateBountyScreen({ navigation }: any) {
   const { createBounty } = useBounty();
@@ -95,15 +93,12 @@ export default function CreateBountyScreen({ navigation }: any) {
         setLoading(false);
         return;
       }
-
-      // Convert payment to wei (STRK has 18 decimals)
-      const amountInWei = (bountyData.payment * Math.pow(10, 18)).toString();
       
       // Convert deadline to Unix timestamp (assuming deadline is in days from now)
-      // Validate and calculate deadline in seconds since epoch
       const deadlineDays = parseInt(bountyData.deadline);
       if (isNaN(deadlineDays) || deadlineDays <= 0) {
         Alert.alert('Error', 'Please enter a valid deadline (number of days)');
+        setLoading(false);
         return;
       }
       
@@ -115,141 +110,34 @@ export default function CreateBountyScreen({ navigation }: any) {
         date: new Date(deadlineTimestamp * 1000).toISOString()
       });
 
-      console.log('Creating bounty on chain with:', {
+      // Use the new managed bounty creation service
+      console.log('🚀 Creating bounty with managed ID system...');
+      const result = await createBountyWithManagedId({
+        title: bountyData.title,
         description: bountyData.description,
-        amount: amountInWei,
-        deadline: deadlineTimestamp,
-        address: userWallet.wallet_address
-      });
-
-      // Create bounty on chain
-      const result = await createBountyOnChain({
-        description: bountyData.description,
-        amount: amountInWei,
-        deadline: deadlineTimestamp,
-        userAddress: userWallet.wallet_address,
-        userPrivateKey: privateKey
-      });
-
-      console.log('Bounty created on chain:', result);
-
-      // Extract transaction hash from the result
-      const transactionHash = result.createBountyTransaction?.result?.transactionHash;
-      if (!transactionHash) {
-        throw new Error('No transaction hash returned from bounty creation');
-      }
-
-      // For now, use transaction hash as on-chain ID (in production, extract from events)
-      const onChainId = transactionHash;
-
-      // Store bounty in Supabase database
-      console.log('Storing bounty in database...');
-      console.log('Deadline timestamp (seconds):', deadlineTimestamp);
-      console.log('Deadline timestamp (milliseconds):', deadlineTimestamp * 1000);
-      
-      // TEST: Check if we can access the bounties table first
-      console.log('🔍 Testing database access...');
-      try {
-        const testQuery = await supabase.from('bounties').select('id').limit(1);
-        console.log('📊 Bounties table test result:', testQuery);
-        
-        if (testQuery.error) {
-          console.error('❌ Database table access failed:', testQuery.error);
-          throw new Error(`Database access failed: ${testQuery.error.message}`);
-        }
-        console.log('✅ Database access successful');
-      } catch (dbError) {
-        console.error('❌ Database test error:', dbError);
-        throw new Error(`Database connection test failed: ${dbError}`);
-      }
-      
-      const bountyToCreate = {
-        creator_id: user!.id,
-        on_chain_id: onChainId,
-        title: bountyData.title.trim(),
-        description: bountyData.description.trim(),
         category: bountyData.category,
         payment: bountyData.payment,
-        amount: amountInWei,
-        deadline: new Date(deadlineTimestamp * 1000).toISOString(), // Convert seconds to milliseconds
-        transaction_hash: transactionHash,
-        wallet_address: userWallet.wallet_address,
-        location_address: bountyData.location || null,
-        requirements: ['Photo proof of completion'] // Default requirement
-      };
-      
-      console.log('📝 About to create bounty with data:', JSON.stringify(bountyToCreate, null, 2));
-      
-      // DIRECT DATABASE CALL TO BYPASS FUNCTION ISSUES
-      console.log('🔄 Making direct database insertion...');
-      
-      let createdBounty;
-      try {
-        // Convert wei to STRK for display
-        const amountBigInt = BigInt(bountyToCreate.amount)
-        const amountStrk = Number(amountBigInt) / Math.pow(10, 18)
+        location_address: bountyData.location || undefined,
+        deadline: deadlineTimestamp,
+        requirements: ['Photo proof of completion'],
+        userAddress: userWallet.wallet_address,
+        userPrivateKey: privateKey,
+        userId: user.id
+      });
 
-        const bountyRecord = {
-          creator_id: bountyToCreate.creator_id,
-          on_chain_id: bountyToCreate.on_chain_id,
-          title: bountyToCreate.title,
-          description: bountyToCreate.description,
-          category: bountyToCreate.category,
-          payment: bountyToCreate.payment,
-          amount: bountyToCreate.amount,
-          amount_strk: amountStrk,
-          location_lat: null,
-          location_lng: null,
-          location_address: bountyToCreate.location_address,
-          deadline: bountyToCreate.deadline,
-          transaction_hash: bountyToCreate.transaction_hash,
-          wallet_address: bountyToCreate.wallet_address,
-          requirements: bountyToCreate.requirements,
-          status: 'open'
-        }
-
-        console.log('🔄 Direct insertion record:', JSON.stringify(bountyRecord, null, 2));
+      if (result.success) {
+        console.log('✅ Bounty created successfully:', result);
         
-        const { data: insertData, error: insertError } = await supabase
-          .from('bounties')
-          .insert([bountyRecord])
-          .select()
-          .single()
-
-        if (insertError) {
-          console.error('❌ Direct insertion error:', insertError)
-          console.error('❌ Error details:', JSON.stringify(insertError, null, 2))
-          throw new Error(`Direct DB error: ${insertError.message} (Code: ${insertError.code})`)
-        }
-
-        console.log('✅ Direct insertion successful:', insertData)
-        createdBounty = insertData
-      } catch (directError) {
-        console.error('❌ Direct insertion failed:', directError)
-        throw directError
+        Alert.alert(
+          'Success! 🎉', 
+          `Bounty created successfully!\n\nTitle: ${bountyData.title}\nAmount: ${bountyData.payment} STRK\nDeadline: ${bountyData.deadline} days\nOn-chain ID: ${result.onChainId}\n\nTransaction: ${result.transactionHash}`,
+          [
+            { text: 'OK', onPress: () => navigation.goBack() }
+          ]
+        );
+      } else {
+        throw new Error(result.error || 'Unknown error occurred during bounty creation');
       }
-      
-      console.log('📄 Created bounty result:', createdBounty);
-      
-      // Quick verification: count total bounties
-      try {
-        const { count } = await supabase
-          .from('bounties')
-          .select('*', { count: 'exact', head: true });
-        console.log('🔍 Total bounties in database after creation:', count);
-      } catch (verifyError) {
-        console.log('🔍 Could not verify bounty count:', verifyError);
-      }
-      
-      console.log('✅ Bounty stored in database successfully!');
-
-      Alert.alert(
-        'Success! 🎉', 
-        `Bounty created successfully!\n\nTitle: ${bountyData.title}\nAmount: ${bountyData.payment} STRK\nDeadline: ${bountyData.deadline}\n\nTransaction: ${transactionHash}`,
-        [
-          { text: 'OK', onPress: () => navigation.goBack() }
-        ]
-      );
 
     } catch (error) {
       console.error('Error creating bounty:', error);
