@@ -9,6 +9,8 @@ export interface CreateBountyServiceParams {
   category: string;
   payment: number;
   location_address?: string;
+  location_lat?: number;
+  location_lng?: number;
   deadline: number; // Unix timestamp
   requirements?: string[];
   userAddress: string;
@@ -34,6 +36,8 @@ export async function createBountyWithManagedId(params: CreateBountyServiceParam
     category,
     payment,
     location_address,
+    location_lat,
+    location_lng,
     deadline,
     requirements = ['Photo proof of completion'],
     userAddress,
@@ -61,6 +65,8 @@ export async function createBountyWithManagedId(params: CreateBountyServiceParam
       amount: amountInWei,
       amount_strk: amountStrk,
       location_address: location_address || null,
+      location_lat: location_lat || null,
+      location_lng: location_lng || null,
       deadline: new Date(deadline * 1000).toISOString(),
       wallet_address: userAddress,
       requirements,

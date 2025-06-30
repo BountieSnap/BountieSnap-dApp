@@ -37,6 +37,15 @@ export interface UserWallet {
   updated_at: string
 }
 
+export interface UserProfile {
+  id: string
+  full_name: string | null
+  username: string | null
+  avatar_url: string | null
+  website: string | null
+  updated_at: string
+}
+
 export interface Bounty {
   id: string
   creator_id: string
@@ -135,6 +144,124 @@ export async function getUserWallet(userId: string): Promise<UserWallet | null> 
   } catch (error) {
     console.error('Error getting user wallet:', error)
     throw error
+  }
+}
+
+export async function getUserProfile(userId: string): Promise<UserProfile | null> {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null // No profile found
+      }
+      throw error
+    }
+
+    return data
+  } catch (error) {
+    console.error('Error getting user profile:', error)
+    throw error
+  }
+}
+
+export async function updateUserProfile(userId: string, updates: Partial<UserProfile>): Promise<UserProfile> {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error updating user profile:', error)
+      throw error
+    }
+
+    return data
+  } catch (error) {
+    console.error('Error updating user profile:', error)
+    throw error
+  }
+}
+
+export async function uploadAvatar(userId: string, imageUri: string): Promise<string> {
+  try {
+    console.log('Starting avatar upload for user:', userId)
+    console.log('Image URI:', imageUri)
+
+    // Test storage connection first
+    console.log('Testing storage connection...')
+    try {
+      const { data: buckets, error: testError } = await supabase.storage.listBuckets()
+      if (testError) {
+        console.error('Storage connection test failed:', testError)
+        throw new Error(`Storage not accessible: ${testError.message}`)
+      }
+      console.log('Storage connection OK, found buckets:', buckets?.map(b => b.name) || [])
+    } catch (connectionError) {
+      console.error('Storage connection failed:', connectionError)
+      throw new Error('Cannot connect to Supabase Storage. Check your environment variables.')
+    }
+
+    // Create a unique filename
+    const fileExt = imageUri.split('.').pop() || 'jpg'
+    const fileName = `${userId}-${Date.now()}.${fileExt}`
+    const filePath = `avatars/${fileName}`
+
+    console.log('Upload path:', filePath)
+
+    // Convert image to array buffer
+    console.log('Converting image to array buffer...')
+    const response = await fetch(imageUri)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status}`)
+    }
+    
+    const arrayBuffer = await response.arrayBuffer()
+    const uint8Array = new Uint8Array(arrayBuffer)
+    console.log('File size:', uint8Array.length, 'bytes')
+
+    // Upload using Uint8Array (better for React Native)
+    console.log('Attempting upload to storage1 bucket...')
+    const { data, error } = await supabase.storage
+      .from('storage1')
+      .upload(filePath, uint8Array, {
+        contentType: `image/${fileExt}`,
+        upsert: true
+      })
+
+    if (error) {
+      console.error('Storage upload error details:', {
+        message: error.message,
+        error: error
+      })
+      throw new Error(`Upload failed: ${error.message}`)
+    }
+
+    console.log('Upload successful:', data)
+
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('storage1')
+      .getPublicUrl(filePath)
+
+    console.log('Public URL:', publicUrl)
+    return publicUrl
+  } catch (error) {
+    console.error('Error uploading avatar:', error)
+    if (error instanceof Error) {
+      throw error
+    }
+    throw new Error('Unknown error occurred during upload')
   }
 }
 

@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuth } from '../context/AuthContext'
 import { getUserWallet, getBountyApplications, updateBountyApplication, getBountyById, Bounty, BountyApplication } from '../utils/supabase'
@@ -163,7 +164,7 @@ export default function ApplicantsScreen({ navigation, route }: ApplicantsScreen
 
   if (loading) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
@@ -177,12 +178,23 @@ export default function ApplicantsScreen({ navigation, route }: ApplicantsScreen
           <ActivityIndicator size="large" color="#8B5CF6" />
           <Text style={styles.loadingText}>Loading applications...</Text>
         </View>
-      </View>
+      </SafeAreaView>
     )
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
+          <Ionicons name="arrow-back" size={24} color="#374151" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Bounty Applications</Text>
+      </View>
+
       <ScrollView 
         style={styles.content}
         refreshControl={
@@ -193,17 +205,6 @@ export default function ApplicantsScreen({ navigation, route }: ApplicantsScreen
           />
         }
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.backButton}
-          >
-            <Ionicons name="arrow-back" size={24} color="#374151" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Bounty Applications</Text>
-        </View>
-
         {/* Bounty Summary */}
         <View style={styles.bountyCard}>
           <Text style={styles.bountyTitle}>{bounty?.title}</Text>
@@ -367,7 +368,7 @@ export default function ApplicantsScreen({ navigation, route }: ApplicantsScreen
           </View>
         )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   )
 }
 

@@ -1,13 +1,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { Session, User } from '@supabase/supabase-js'
-import { supabase, createUserWallet, testDatabaseConnection } from '../utils/supabase'
+import { supabase, createUserWallet, getUserWallet, testDatabaseConnection } from '../utils/supabase'
 import { createWallet } from '../utils/utils'
 
 interface AuthContextType {
   user: User | null
   session: Session | null
   loading: boolean
-  signUp: (email: string, password: string) => Promise<{ error?: any }>
+  signUp: (email: string, password: string, name?: string) => Promise<{ error?: any }>
   signIn: (email: string, password: string) => Promise<{ error?: any }>
   signOut: () => Promise<{ error?: any }>
 }
@@ -62,6 +62,30 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // Function to ensure user has a wallet
+  const ensureUserWallet = async (userId: string) => {
+    try {
+      // Check if wallet already exists
+      const existingWallet = await getUserWallet(userId)
+      if (existingWallet) {
+        console.log('User wallet already exists')
+        return
+      }
+
+      // Create wallet if it doesn't exist
+      console.log('Creating wallet for user:', userId)
+      const walletData = await createWallet('sepolia')
+      
+      // Store wallet data in Supabase with retry logic
+      await createUserWalletWithRetry(userId, walletData)
+      
+      console.log('Wallet created successfully for user:', userId)
+    } catch (error) {
+      console.error('Failed to ensure user wallet:', error)
+      // Don't throw error here, just log it - user can still use the app
+    }
+  }
+
   useEffect(() => {
     // Test database connection on app start
     testDatabaseConnection()
@@ -70,6 +94,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       setUser(session?.user ?? null)
+      
+      // Ensure wallet exists for authenticated user
+      if (session?.user?.id) {
+        ensureUserWallet(session.user.id)
+      }
+      
       setLoading(false)
     })
 
@@ -79,45 +109,37 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
       setUser(session?.user ?? null)
+      
+      // Ensure wallet exists when user signs in
+      if (session?.user?.id) {
+        ensureUserWallet(session.user.id)
+      }
+      
       setLoading(false)
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, name?: string) => {
     try {
-      // First, create the user account
+      // Create the user account with metadata (no wallet creation here)
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            full_name: name || '',
+          }
+        }
       })
 
       if (authError) {
         return { error: authError }
       }
 
-      // If user creation was successful and we have a user ID, create wallet
-      if (authData.user?.id) {
-        try {
-          console.log('Creating wallet for user:', authData.user.id)
-          const walletData = await createWallet('sepolia')
-          
-          // Store wallet data in Supabase with retry logic
-          await createUserWalletWithRetry(authData.user.id, walletData)
-          
-          console.log('Wallet created successfully for user:', authData.user.id)
-        } catch (walletError) {
-          console.error('Failed to create wallet:', {
-            error: walletError,
-            message: walletError instanceof Error ? walletError.message : 'Unknown wallet error',
-            userId: authData.user.id
-          })
-          // Note: We don't return the wallet error here as the user account was created successfully
-          // The wallet creation can be retried later if needed
-        }
-      }
-
+      // Wallet will be created on first login when user is fully available
+      console.log('User created successfully, wallet will be created on first login')
       return { error: null }
     } catch (error) {
       console.error('Signup error:', error)

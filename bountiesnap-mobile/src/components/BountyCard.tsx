@@ -14,10 +14,11 @@ import { Bounty } from '../types';
 interface BountyCardProps {
   bounty: Bounty;
   onAccept?: (bountyId: string) => void;
+  onPress?: () => void;
   showStatus?: boolean;
 }
 
-export default function BountyCard({ bounty, onAccept, showStatus = false }: BountyCardProps) {
+export default function BountyCard({ bounty, onAccept, onPress, showStatus = false }: BountyCardProps) {
   const categoryColors = {
     delivery: { bg: '#DBEAFE', text: '#1E40AF' },
     shopping: { bg: '#D1FAE5', text: '#065F46' },
@@ -48,7 +49,11 @@ export default function BountyCard({ bounty, onAccept, showStatus = false }: Bou
   const statusColor = statusColors[bounty.status];
 
   return (
-    <View style={styles.container}>
+    <TouchableOpacity 
+      style={styles.container}
+      onPress={onPress}
+      activeOpacity={onPress ? 0.7 : 1}
+    >
       <View style={styles.header}>
         <View style={styles.badges}>
           <View style={[styles.badge, { backgroundColor: categoryColor.bg }]}>
@@ -109,7 +114,7 @@ export default function BountyCard({ bounty, onAccept, showStatus = false }: Bou
           </TouchableOpacity>
         )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,14 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
+  Modal,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import * as Location from 'expo-location';
 
 import { useBounty } from '../context/BountyContext';
 import { useAuth } from '../context/AuthContext';
@@ -18,17 +22,30 @@ import { getUserWallet } from '../utils/supabase';
 import { debugWalletData, extractPrivateKey, validateWalletForTransaction } from '../utils/walletDebug';
 import { createBountyWithManagedId } from '../services/bountyService';
 
+const { width, height } = Dimensions.get('window');
+
 export default function CreateBountyScreen({ navigation }: any) {
   const { createBounty } = useBounty();
   const { user } = useAuth();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState<any>(null);
+  const [selectedLocation, setSelectedLocation] = useState<any>(null);
+  const [mapRegion, setMapRegion] = useState({
+    latitude: 40.7128, // Default while loading
+    longitude: -74.0060,
+    latitudeDelta: 0.01,
+    longitudeDelta: 0.01,
+  });
   const [bountyData, setBountyData] = useState({
     title: '',
     description: '',
     category: 'delivery',
     payment: 0,
     location: '',
+    location_lat: 0,
+    location_lng: 0,
     deadline: '',
     requirements: [] as string[]
   });
@@ -41,12 +58,117 @@ export default function CreateBountyScreen({ navigation }: any) {
     { id: 'other', label: 'Other', emoji: '📦', suggestedPrice: 20 }
   ];
 
+  // Get user's current location on component mount
+  useEffect(() => {
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission denied', 'Permission to access location was denied');
+        return;
+      }
+
+      let location = await Location.getCurrentPositionAsync({});
+      setCurrentLocation(location);
+      
+      // Update map region to user's location
+      if (location?.coords) {
+        setMapRegion({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        });
+        console.log('📍 Current location:', location.coords);
+      }
+    })();
+  }, []);
+
   const handleNext = () => {
     if (step < 3) setStep(step + 1);
   };
 
   const handleBack = () => {
     if (step > 1) setStep(step - 1);
+  };
+
+  const handleLocationSelect = () => {
+    setShowLocationPicker(true);
+  };
+
+  const handleMapPress = (event: any) => {
+    const { latitude, longitude } = event.nativeEvent.coordinate;
+    setSelectedLocation({
+      latitude,
+      longitude,
+    });
+    console.log('📍 Selected location:', { latitude, longitude });
+  };
+
+  const confirmLocationSelection = async () => {
+    if (!selectedLocation) {
+      Alert.alert('Error', 'Please select a location on the map');
+      return;
+    }
+
+    try {
+      // Reverse geocoding to get address from coordinates
+      const address = await Location.reverseGeocodeAsync({
+        latitude: selectedLocation.latitude,
+        longitude: selectedLocation.longitude,
+      });
+
+      if (address && address.length > 0) {
+        const addr = address[0];
+        const formattedAddress = `${addr.name || ''} ${addr.street || ''}, ${addr.city || ''}, ${addr.region || ''}`.trim();
+        
+        setBountyData({
+          ...bountyData,
+          location: formattedAddress,
+          location_lat: selectedLocation.latitude,
+          location_lng: selectedLocation.longitude,
+        });
+        
+        console.log('📍 Location saved:', {
+          address: formattedAddress,
+          lat: selectedLocation.latitude,
+          lng: selectedLocation.longitude,
+        });
+      } else {
+        setBountyData({
+          ...bountyData,
+          location: `${selectedLocation.latitude.toFixed(6)}, ${selectedLocation.longitude.toFixed(6)}`,
+          location_lat: selectedLocation.latitude,
+          location_lng: selectedLocation.longitude,
+        });
+      }
+    } catch (error) {
+      console.error('Error getting address:', error);
+      setBountyData({
+        ...bountyData,
+        location: `${selectedLocation.latitude.toFixed(6)}, ${selectedLocation.longitude.toFixed(6)}`,
+        location_lat: selectedLocation.latitude,
+        location_lng: selectedLocation.longitude,
+      });
+    }
+
+    setShowLocationPicker(false);
+  };
+
+  const useCurrentLocation = () => {
+    if (currentLocation) {
+      const newLocation = {
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+      };
+      setSelectedLocation(newLocation);
+      // Also center the map on current location
+      setMapRegion({
+        latitude: newLocation.latitude,
+        longitude: newLocation.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      });
+    }
   };
 
   const handleSubmit = async () => {
@@ -118,6 +240,8 @@ export default function CreateBountyScreen({ navigation }: any) {
         category: bountyData.category,
         payment: bountyData.payment,
         location_address: bountyData.location || undefined,
+        location_lat: bountyData.location_lat || undefined,
+        location_lng: bountyData.location_lng || undefined,
         deadline: deadlineTimestamp,
         requirements: ['Photo proof of completion'],
         userAddress: userWallet.wallet_address,
@@ -273,10 +397,27 @@ export default function CreateBountyScreen({ navigation }: any) {
         </View>
       </View>
 
-      <View style={styles.mapPreview}>
-        <Ionicons name="map-outline" size={32} color="#9CA3AF" />
-        <Text style={styles.mapPreviewText}>Tap to select location on map</Text>
-      </View>
+      <TouchableOpacity style={styles.mapPreview} onPress={handleLocationSelect}>
+        {bountyData.location ? (
+          <View style={styles.selectedLocationContainer}>
+            <Ionicons name="location" size={24} color="#10B981" />
+            <View style={styles.selectedLocationText}>
+              <Text style={styles.selectedLocationTitle}>Location Selected</Text>
+              <Text style={styles.selectedLocationAddress} numberOfLines={2}>
+                {bountyData.location}
+              </Text>
+              <Text style={styles.coordinates}>
+                {bountyData.location_lat.toFixed(6)}, {bountyData.location_lng.toFixed(6)}
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.mapPreviewPlaceholder}>
+            <Ionicons name="map-outline" size={32} color="#9CA3AF" />
+            <Text style={styles.mapPreviewText}>Tap to select location on map</Text>
+          </View>
+        )}
+      </TouchableOpacity>
     </ScrollView>
   );
 
@@ -391,6 +532,62 @@ export default function CreateBountyScreen({ navigation }: any) {
           </LinearGradient>
         </TouchableOpacity>
       </View>
+
+      {/* Location Picker Modal */}
+      <Modal
+        visible={showLocationPicker}
+        animationType="slide"
+        presentationStyle="fullScreen"
+      >
+        <SafeAreaView style={styles.locationPickerContainer}>
+          <View style={styles.locationPickerHeader}>
+            <TouchableOpacity onPress={() => setShowLocationPicker(false)}>
+              <Ionicons name="close" size={24} color="#374151" />
+            </TouchableOpacity>
+            <Text style={styles.locationPickerTitle}>Select Location</Text>
+            <TouchableOpacity onPress={confirmLocationSelection}>
+              <Text style={styles.confirmLocationText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+
+          <MapView
+            style={styles.locationPickerMap}
+            provider={PROVIDER_GOOGLE}
+            region={mapRegion}
+            onPress={handleMapPress}
+            showsUserLocation={true}
+            showsMyLocationButton={false}
+            onRegionChangeComplete={setMapRegion}
+          >
+            {selectedLocation && (
+              <Marker
+                coordinate={{
+                  latitude: selectedLocation.latitude,
+                  longitude: selectedLocation.longitude,
+                }}
+                draggable
+                onDragEnd={(e) => setSelectedLocation(e.nativeEvent.coordinate)}
+              >
+                <View style={styles.customMarker}>
+                  <Ionicons name="location" size={32} color="#EF4444" />
+                </View>
+              </Marker>
+            )}
+          </MapView>
+
+          <View style={styles.locationPickerFooter}>
+            <TouchableOpacity style={styles.currentLocationButton} onPress={useCurrentLocation}>
+              <Ionicons name="locate" size={20} color="#8B5CF6" />
+              <Text style={styles.currentLocationText}>Use Current Location</Text>
+            </TouchableOpacity>
+            {selectedLocation && (
+              <Text style={styles.selectedCoordinates}>
+                Selected: {selectedLocation.latitude.toFixed(6)}, {selectedLocation.longitude.toFixed(6)}
+              </Text>
+            )}
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -537,10 +734,38 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 16,
   },
+  mapPreviewPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   mapPreviewText: {
     fontSize: 14,
     color: '#6B7280',
     marginTop: 8,
+  },
+  selectedLocationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  selectedLocationText: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  selectedLocationTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#10B981',
+    marginBottom: 4,
+  },
+  selectedLocationAddress: {
+    fontSize: 14,
+    color: '#374151',
+    marginBottom: 4,
+  },
+  coordinates: {
+    fontSize: 12,
+    color: '#6B7280',
   },
   requirementsList: {
     marginTop: 8,
@@ -640,5 +865,63 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: 'white',
+  },
+  // Location Picker Modal Styles
+  locationPickerContainer: {
+    flex: 1,
+    backgroundColor: 'white',
+  },
+  locationPickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  locationPickerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  confirmLocationText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#8B5CF6',
+  },
+  locationPickerMap: {
+    flex: 1,
+  },
+  customMarker: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  locationPickerFooter: {
+    padding: 16,
+    backgroundColor: 'white',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  currentLocationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  currentLocationText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8B5CF6',
+    marginLeft: 8,
+  },
+  selectedCoordinates: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
   },
 });

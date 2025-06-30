@@ -66,7 +66,7 @@ function TabNavigator() {
     >
       <Tab.Screen name="Map" component={MapScreen} />
       <Tab.Screen name="Tasks" component={TasksScreen} />
-      <Tab.Screen name="Achievements" component={AchievementsScreen} />
+      {/* <Tab.Screen name="Achievements" component={AchievementsScreen} /> */}
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );

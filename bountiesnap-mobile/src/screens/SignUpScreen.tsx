@@ -19,6 +19,7 @@ interface SignUpScreenProps {
 }
 
 export default function SignUpScreen({ navigation }: SignUpScreenProps) {
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -28,7 +29,7 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
   const { signUp } = useAuth()
 
   const handleSignUp = async () => {
-    if (!email || !password || !confirmPassword) {
+    if (!name || !email || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields')
       return
     }
@@ -44,7 +45,7 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
     }
 
     setLoading(true)
-    const { error } = await signUp(email, password)
+    const { error } = await signUp(email, password, name)
     setLoading(false)
 
     if (error) {
@@ -84,6 +85,18 @@ export default function SignUpScreen({ navigation }: SignUpScreenProps) {
         </LinearGradient>
 
         <View style={styles.form}>
+          <View style={styles.inputContainer}>
+            <Ionicons name="person-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="Full Name"
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
+              autoCorrect={false}
+            />
+          </View>
+
           <View style={styles.inputContainer}>
             <Ionicons name="mail-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
             <TextInput

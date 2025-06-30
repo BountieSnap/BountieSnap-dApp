@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Modal
 } from 'react-native'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuth } from '../context/AuthContext'
 import { getUserWallet, createBountyApplication, getBountyApplications, getBountyById, BountyApplication, Bounty, updateBountyApplication } from '../utils/supabase'
@@ -24,6 +25,7 @@ interface BountyDetailsScreenProps {
 
 export default function BountyDetailsScreen({ navigation, route }: BountyDetailsScreenProps) {
   const { user } = useAuth()
+  const insets = useSafeAreaInsets()
   const { bounty: passedBounty, bountyId } = route.params
   
   const [bounty, setBounty] = useState<Bounty | null>(passedBounty || null)
@@ -545,10 +547,16 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
     const myApp = getMyApplication()
     const approvedApp = getApprovedApplication()
 
+    // Dynamic action section style with bottom safe area
+    const actionSectionStyle = [
+      styles.actionSection,
+      { paddingBottom: Math.max(16, insets.bottom + 8) }
+    ]
+
     // For Bounty Creator
     if (isMyBounty()) {
       return (
-        <View style={styles.actionSection}>
+        <View style={actionSectionStyle}>
           {/* Manage Applications Button */}
           <TouchableOpacity
             style={styles.primaryActionButton}
@@ -608,7 +616,7 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
     if (myApp) {
       if (myApp.status === 'pending') {
         return (
-          <View style={styles.actionSection}>
+          <View style={actionSectionStyle}>
             <View style={styles.statusButton}>
               <Ionicons name="time" size={20} color="#F59E0B" />
               <Text style={[styles.actionStatusText, { color: '#F59E0B' }]}>Application Pending</Text>
@@ -619,7 +627,7 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
 
       if (myApp.status === 'approved') {
         return (
-          <View style={styles.actionSection}>
+          <View style={actionSectionStyle}>
             <TouchableOpacity
               style={[styles.primaryActionButton, styles.proofButton, submittingProof && styles.disabledButton]}
               onPress={handleSubmitProof}
@@ -643,7 +651,7 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
 
       if (myApp.status === 'submitted') {
         return (
-          <View style={styles.actionSection}>
+          <View style={actionSectionStyle}>
             <View style={styles.statusButton}>
               <Ionicons name="checkmark-circle" size={20} color="#10B981" />
               <Text style={[styles.actionStatusText, { color: '#10B981' }]}>
@@ -661,7 +669,7 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
 
       if (myApp.status === 'completed') {
         return (
-          <View style={styles.actionSection}>
+          <View style={actionSectionStyle}>
             <View style={styles.statusButton}>
               <Ionicons name="checkmark-circle" size={20} color="#10B981" />
               <Text style={[styles.actionStatusText, { color: '#10B981' }]}>
@@ -676,7 +684,7 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
       }
 
       return (
-        <View style={styles.actionSection}>
+        <View style={actionSectionStyle}>
           <View style={styles.statusButton}>
             <Ionicons name="information-circle" size={20} color="#6B7280" />
             <Text style={[styles.actionStatusText, { color: '#6B7280' }]}>
@@ -690,7 +698,7 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
     // For users who haven't applied yet
     if (canApply()) {
       return (
-        <View style={styles.actionSection}>
+        <View style={actionSectionStyle}>
           <TouchableOpacity
             style={styles.primaryActionButton}
             onPress={() => setShowApplyModal(true)}
@@ -704,7 +712,7 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
 
     // Default case (expired, can't apply, etc.)
     return (
-      <View style={styles.actionSection}>
+      <View style={actionSectionStyle}>
         <View style={styles.statusButton}>
           <Ionicons name="close-circle" size={20} color="#6B7280" />
           <Text style={[styles.actionStatusText, { color: '#6B7280' }]}>
@@ -783,7 +791,7 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
   // Show loading state while bounty is being loaded
   if (loadingBounty || !bounty) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
@@ -797,24 +805,24 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
           <ActivityIndicator size="large" color="#8B5CF6" />
           <Text style={styles.loadingText}>Loading bounty details...</Text>
         </View>
-      </View>
+      </SafeAreaView>
     )
   }
 
   return (
-    <View style={styles.container}>
-      <ScrollView style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.backButton}
-          >
-            <Ionicons name="arrow-back" size={24} color="#374151" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Bounty Details</Text>
-        </View>
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
+          <Ionicons name="arrow-back" size={24} color="#374151" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Bounty Details</Text>
+      </View>
 
+      <ScrollView style={styles.content}>
         {/* Bounty Info */}
         <View style={styles.bountyCard}>
           <View style={styles.titleSection}>
@@ -904,7 +912,7 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
       {renderActionButtons()}
 
       {renderApplyModal()}
-    </View>
+    </SafeAreaView>
   )
 }
 

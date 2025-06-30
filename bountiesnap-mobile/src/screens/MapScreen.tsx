@@ -26,6 +26,12 @@ export default function MapScreen({ navigation }: any) {
   const [selectedBounty, setSelectedBounty] = useState<any>(null);
   const [showBountyList, setShowBountyList] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [mapRegion, setMapRegion] = useState({
+    latitude: 40.7128, // Default to NYC while loading
+    longitude: -74.0060,
+    latitudeDelta: 0.0922,
+    longitudeDelta: 0.0421,
+  });
 
   useEffect(() => {
     (async () => {
@@ -37,6 +43,17 @@ export default function MapScreen({ navigation }: any) {
 
       let location = await Location.getCurrentPositionAsync({});
       setLocation(location);
+      
+      // Update map region to user's location
+      if (location?.coords) {
+        setMapRegion({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
+        });
+        console.log('📍 Map centered on user location:', location.coords);
+      }
     })();
 
     // Load bounties from database
@@ -90,14 +107,10 @@ export default function MapScreen({ navigation }: any) {
       <MapView
         style={styles.map}
         provider={PROVIDER_GOOGLE}
-        initialRegion={{
-          latitude: location?.coords?.latitude || 40.7128,
-          longitude: location?.coords?.longitude || -74.0060,
-          latitudeDelta: 0.0922,
-          longitudeDelta: 0.0421,
-        }}
+        region={mapRegion}
         showsUserLocation={true}
         showsMyLocationButton={false}
+        onRegionChangeComplete={setMapRegion}
       >
         {openBounties
           .filter((bounty: any) => bounty.location_lat && bounty.location_lng)

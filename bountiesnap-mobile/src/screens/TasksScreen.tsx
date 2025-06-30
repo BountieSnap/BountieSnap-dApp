@@ -6,6 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,12 +17,25 @@ import { useBounty } from '../context/BountyContext';
 import BountyCard from '../components/BountyCard';
 
 export default function TasksScreen({ navigation }: any) {
-  const { userTasks, completeTask } = useBounty();
+  const { userTasks, completeTask, loading, refreshData, user } = useBounty();
   const [activeTab, setActiveTab] = useState<'active' | 'completed' | 'posted'>('active');
+  const [refreshing, setRefreshing] = useState(false);
 
   const activeTasks = userTasks.filter(task => task.status === 'accepted');
   const completedTasks = userTasks.filter(task => task.status === 'completed');
-  const postedTasks = userTasks.filter(task => task.seeker.id === '1');
+  const postedTasks = userTasks.filter(task => task.seeker.id === user.id);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshData();
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      Alert.alert('Error', 'Failed to refresh tasks');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handleCompleteTask = async (taskId: string) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -37,8 +52,13 @@ export default function TasksScreen({ navigation }: any) {
     });
 
     if (!result.canceled && result.assets[0]) {
-      completeTask(taskId, result.assets[0].uri);
-      Alert.alert('Success', 'Task completed successfully!');
+      try {
+        await completeTask(taskId, result.assets[0].uri);
+        Alert.alert('Success', 'Task completed successfully!');
+      } catch (error) {
+        console.error('Error completing task:', error);
+        Alert.alert('Error', 'Failed to complete task');
+      }
     }
   };
 
@@ -122,8 +142,24 @@ export default function TasksScreen({ navigation }: any) {
       </View>
 
       {/* Content */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {getCurrentTasks().length === 0 ? (
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={['#8B5CF6']}
+            tintColor="#8B5CF6"
+          />
+        }
+      >
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#8B5CF6" />
+            <Text style={styles.loadingText}>Loading your tasks...</Text>
+          </View>
+        ) : getCurrentTasks().length === 0 ? (
           <View style={styles.emptyState}>
             <View style={styles.emptyIconContainer}>
               <Ionicons name={getEmptyStateIcon()} size={48} color="#9CA3AF" />
@@ -135,7 +171,13 @@ export default function TasksScreen({ navigation }: any) {
           <View style={styles.taskList}>
             {getCurrentTasks().map((task) => (
               <View key={task.id} style={styles.taskItem}>
-                <BountyCard bounty={task} showStatus />
+                <BountyCard 
+                  bounty={task} 
+                  showStatus 
+                  onPress={() => navigation.navigate('BountyDetails', { 
+                    bountyId: task.id 
+                  })}
+                />
                 
                 {/* Active Task Actions */}
                 {activeTab === 'active' && (
@@ -295,5 +337,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
     marginTop: 8,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 80,
+    paddingHorizontal: 32,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginTop: 16,
+    textAlign: 'center',
   },
 });

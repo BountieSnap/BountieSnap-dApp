@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,17 +7,21 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 
 import { useBounty } from '../context/BountyContext';
 import { useAuth } from '../context/AuthContext';
 
 export default function ProfileScreen() {
-  const { user, userTasks } = useBounty();
+  const { user, userTasks, updateAvatar } = useBounty();
   const { signOut, user: authUser } = useAuth();
+  const insets = useSafeAreaInsets();
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -33,6 +37,38 @@ export default function ProfileScreen() {
     const { error } = await signOut();
     if (error) {
       Alert.alert('Error', 'Failed to log out');
+    }
+  };
+
+  const handleEditAvatar = async () => {
+    if (uploadingAvatar) return;
+
+    // Request permission
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Camera roll permission is required to upload an avatar');
+      return;
+    }
+
+    // Launch image picker
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1], // Square aspect ratio for avatar
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setUploadingAvatar(true);
+      try {
+        await updateAvatar(result.assets[0].uri);
+        Alert.alert('Success', 'Avatar updated successfully!');
+      } catch (error) {
+        console.error('Error updating avatar:', error);
+        Alert.alert('Error', 'Failed to update avatar. Please try again.');
+      } finally {
+        setUploadingAvatar(false);
+      }
     }
   };
 
@@ -64,8 +100,16 @@ export default function ProfileScreen() {
           <View style={styles.userInfo}>
             <View style={styles.avatarContainer}>
               <Image source={{ uri: user.avatar }} style={styles.avatar} />
-              <TouchableOpacity style={styles.editAvatarButton}>
-                <Ionicons name="pencil" size={14} color="#8B5CF6" />
+              <TouchableOpacity 
+                style={styles.editAvatarButton}
+                onPress={handleEditAvatar}
+                disabled={uploadingAvatar}
+              >
+                {uploadingAvatar ? (
+                  <ActivityIndicator size="small" color="#8B5CF6" />
+                ) : (
+                  <Ionicons name="pencil" size={14} color="#8B5CF6" />
+                )}
               </TouchableOpacity>
             </View>
             
@@ -101,7 +145,7 @@ export default function ProfileScreen() {
           </View>
         </LinearGradient>
 
-        <View style={styles.content}>
+        <View style={[styles.content, { paddingBottom: Math.max(16, insets.bottom + 8) }]}>
           {/* Performance Stats */}
           <View style={styles.performanceCard}>
             <View style={styles.cardHeader}>
