@@ -2,7 +2,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -13,6 +13,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import CreateBountyScreen from './src/screens/CreateBountyScreen';
 import BountiesListScreen from './src/screens/BountiesListScreen';
 import BountyDetailsScreen from './src/screens/BountyDetailsScreen';
+import ApplicantsScreen from './src/screens/ApplicantsScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
 import LoadingScreen from './src/screens/LoadingScreen';
@@ -24,6 +25,8 @@ const Stack = createStackNavigator();
 const AuthStack = createStackNavigator();
 
 function TabNavigator() {
+  const insets = useSafeAreaInsets();
+  
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -50,9 +53,13 @@ function TabNavigator() {
           backgroundColor: 'white',
           borderTopWidth: 1,
           borderTopColor: '#E5E7EB',
-          paddingBottom: 5,
-          paddingTop: 5,
-          height: 60,
+          paddingBottom: Math.max(insets.bottom, 8), // Respect safe area with minimum padding
+          paddingTop: 8,
+          height: 60 + Math.max(insets.bottom, 8), // Adjust height for safe area
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
         },
         headerShown: false,
       })}
@@ -99,6 +106,11 @@ function AppNavigator() {
           <Stack.Screen 
             name="BountyDetails" 
             component={BountyDetailsScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen 
+            name="Applicants" 
+            component={ApplicantsScreen}
             options={{ headerShown: false }}
           />
         </Stack.Navigator>

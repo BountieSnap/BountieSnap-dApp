@@ -12,9 +12,10 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuth } from '../context/AuthContext'
-import { getUserWallet, createBountyApplication, getBountyApplications, getBountyById, BountyApplication, Bounty } from '../utils/supabase'
-import { applyToBountyOnChain } from '../utils/bountyContractFixed'
+import { getUserWallet, createBountyApplication, getBountyApplications, getBountyById, BountyApplication, Bounty, updateBountyApplication } from '../utils/supabase'
+import { applyToBountyOnChain, submitCompletionOnChain, confirmCompletionOnChain, releaseFundsOnChain } from '../utils/bountyContractFixed'
 import { extractPrivateKey } from '../utils/walletDebug'
+import { selectProofPhoto, PhotoResult } from '../utils/camera'
 
 interface BountyDetailsScreenProps {
   navigation: any
@@ -32,6 +33,11 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
   const [showApplyModal, setShowApplyModal] = useState(false)
   const [applications, setApplications] = useState<BountyApplication[]>([])
   const [loadingApplications, setLoadingApplications] = useState(true)
+  const [submittingProof, setSubmittingProof] = useState(false)
+  const [confirmingCompletion, setConfirmingCompletion] = useState(false)
+  const [proofPhoto, setProofPhoto] = useState<PhotoResult | null>(null)
+  const [completionConfirmed, setCompletionConfirmed] = useState(false)
+  const [releasingFunds, setReleasingFunds] = useState(false)
 
   useEffect(() => {
     loadBounty()
@@ -122,6 +128,19 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
     const now = new Date()
     const deadlineDate = new Date(bounty.deadline)
     return deadlineDate.getTime() <= now.getTime()
+  }
+
+  const getMyApplication = () => {
+    return applications.find(app => app.hunter_id === user?.id)
+  }
+
+  const isMyBounty = () => {
+    return bounty?.creator_id === user?.id
+  }
+
+  const getApprovedApplication = () => {
+    // Find the active application (either approved or submitted)
+    return applications.find(app => app.status === 'approved' || app.status === 'submitted')
   }
 
   const hasAlreadyApplied = () => {
@@ -228,6 +247,472 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSubmitProof = async () => {
+    if (!user?.id || !bounty) {
+      Alert.alert('Error', 'Missing required data')
+      return
+    }
+
+    const myApp = getMyApplication()
+    if (!myApp || myApp.status !== 'approved') {
+      Alert.alert('Error', 'You are not approved for this bounty')
+      return
+    }
+
+    // First, let user take/select photo
+    const photo = await selectProofPhoto()
+    if (!photo) {
+      return // User cancelled
+    }
+
+    try {
+      setSubmittingProof(true)
+
+      // Get user wallet
+      const userWallet = await getUserWallet(user.id)
+      if (!userWallet) {
+        Alert.alert('Error', 'No wallet found. Please create a wallet first.')
+        return
+      }
+
+      const privateKey = extractPrivateKey(userWallet)
+      if (!privateKey) {
+        Alert.alert('Error', 'Could not extract private key from wallet')
+        return
+      }
+
+      console.log('📸 Submitting proof on chain:', {
+        bountyId: bounty.on_chain_id,
+        proofHash: photo.proofHash,
+        userAddress: userWallet.wallet_address
+      })
+
+      // Submit completion on blockchain
+      const result = await submitCompletionOnChain(
+        bounty.on_chain_id,
+        photo.proofHash,
+        userWallet.wallet_address,
+        privateKey
+      )
+
+      console.log('✅ Proof submission result:', result)
+
+      // Update application in database - set to 'submitted' (waiting for creator confirmation)
+      await updateBountyApplication(myApp.id, {
+        status: 'submitted',
+        updated_at: new Date().toISOString()
+      })
+
+      setProofPhoto(photo)
+
+      Alert.alert(
+        'Proof Submitted! 📸',
+        'Your proof has been submitted to the blockchain. The bounty creator will review it and confirm completion.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              loadApplications() // Refresh applications
+            }
+          }
+        ]
+      )
+
+    } catch (error) {
+      console.error('Error submitting proof:', error)
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to submit proof')
+    } finally {
+      setSubmittingProof(false)
+    }
+  }
+
+  const handleConfirmCompletion = async () => {
+    if (!user?.id || !bounty) {
+      Alert.alert('Error', 'Missing required data')
+      return
+    }
+
+    if (!isMyBounty()) {
+      Alert.alert('Error', 'Only the bounty creator can confirm completion')
+      return
+    }
+
+    const approvedApp = getApprovedApplication()
+    if (!approvedApp || approvedApp.status !== 'submitted') {
+      Alert.alert('Error', 'No submitted work to confirm')
+      return
+    }
+
+    Alert.alert(
+      'Confirm Completion',
+      'Are you satisfied with the work submitted? This will confirm completion and release funds to the hunter.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Confirm & Release Funds',
+          style: 'default',
+          onPress: () => proceedWithConfirmation()
+        }
+      ]
+    )
+  }
+
+  const handleReleaseFunds = async () => {
+    if (!user?.id || !bounty) {
+      Alert.alert('Error', 'Missing required data')
+      return
+    }
+
+    try {
+      setReleasingFunds(true)
+
+      // Get user wallet
+      const userWallet = await getUserWallet(user.id)
+      if (!userWallet) {
+        Alert.alert('Error', 'No wallet found. Please create a wallet first.')
+        return
+      }
+
+      const privateKey = extractPrivateKey(userWallet)
+      if (!privateKey) {
+        Alert.alert('Error', 'Could not extract private key from wallet')
+        return
+      }
+
+      console.log('💰 Attempting to release funds...')
+
+      // Release funds on blockchain
+      const releaseResult = await releaseFundsOnChain(
+        bounty.on_chain_id,
+        userWallet.wallet_address,
+        privateKey
+      )
+
+      console.log('✅ Fund release result:', releaseResult)
+
+      // Update application status to 'completed' after successful fund release
+      const approvedApp = getApprovedApplication()
+      if (approvedApp) {
+        await updateBountyApplication(approvedApp.id, {
+          status: 'completed',
+          updated_at: new Date().toISOString()
+        })
+      }
+
+      setCompletionConfirmed(false) // Reset state
+      
+      Alert.alert(
+        'Funds Released! 🎉',
+        'The funds have been successfully released to the hunter.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              loadApplications() // Refresh to show updated status
+              navigation.goBack()
+            }
+          }
+        ]
+      )
+
+    } catch (error) {
+      console.error('Error releasing funds:', error)
+      Alert.alert(
+        'Fund Release Failed',
+        error instanceof Error ? error.message : 'Failed to release funds. Please try again.',
+        [
+          {
+            text: 'Retry',
+            onPress: () => handleReleaseFunds()
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          }
+        ]
+      )
+    } finally {
+      setReleasingFunds(false)
+    }
+  }
+
+  const proceedWithConfirmation = async () => {
+    if (!user?.id || !bounty) return
+
+    try {
+      setConfirmingCompletion(true)
+
+      // Get user wallet
+      const userWallet = await getUserWallet(user.id)
+      if (!userWallet) {
+        Alert.alert('Error', 'No wallet found. Please create a wallet first.')
+        return
+      }
+
+      const privateKey = extractPrivateKey(userWallet)
+      if (!privateKey) {
+        Alert.alert('Error', 'Could not extract private key from wallet')
+        return
+      }
+
+      console.log('✅ Confirming completion on chain:', {
+        bountyId: bounty.on_chain_id,
+        userAddress: userWallet.wallet_address
+      })
+
+      // Confirm completion on blockchain
+      const confirmResult = await confirmCompletionOnChain(
+        bounty.on_chain_id,
+        userWallet.wallet_address,
+        privateKey
+      )
+
+      console.log('✅ Completion confirmation result:', confirmResult)
+
+      // Mark completion as confirmed
+      setCompletionConfirmed(true)
+
+      // Try to release funds immediately
+      console.log('💰 Attempting to release funds...')
+      
+      try {
+        // Release funds on blockchain
+        const releaseResult = await releaseFundsOnChain(
+          bounty.on_chain_id,
+          userWallet.wallet_address,
+          privateKey
+        )
+
+        console.log('✅ Fund release result:', releaseResult)
+
+        // Update application status to 'completed' after successful fund release
+        const approvedApp = getApprovedApplication()
+        if (approvedApp) {
+          await updateBountyApplication(approvedApp.id, {
+            status: 'completed',
+            updated_at: new Date().toISOString()
+          })
+        }
+
+        setCompletionConfirmed(false) // Reset state
+        
+        Alert.alert(
+          'Success! 🎉',
+          'The bounty has been completed successfully and funds have been released to the hunter.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                loadApplications() // Refresh to show updated status
+                navigation.goBack()
+              }
+            }
+          ]
+        )
+
+      } catch (releaseError) {
+        console.error('Fund release failed:', releaseError)
+        
+        Alert.alert(
+          'Completion Confirmed ✅',
+          'The completion has been confirmed on the blockchain, but fund release failed. This may be due to a timing issue. You can retry releasing funds manually.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                loadApplications() // Refresh to show updated status
+              }
+            }
+          ]
+        )
+      }
+
+    } catch (error) {
+      console.error('Error confirming completion:', error)
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to confirm completion')
+    } finally {
+      setConfirmingCompletion(false)
+    }
+  }
+
+  const navigateToApplicants = () => {
+    navigation.navigate('Applicants', { bounty })
+  }
+
+  const renderActionButtons = () => {
+    const myApp = getMyApplication()
+    const approvedApp = getApprovedApplication()
+
+    // For Bounty Creator
+    if (isMyBounty()) {
+      return (
+        <View style={styles.actionSection}>
+          {/* Manage Applications Button */}
+          <TouchableOpacity
+            style={styles.primaryActionButton}
+            onPress={navigateToApplicants}
+          >
+            <Ionicons name="people" size={20} color="white" />
+            <Text style={styles.primaryActionText}>
+              Manage Applications ({applications.length})
+            </Text>
+          </TouchableOpacity>
+
+          {/* Confirm Completion Button (if hunter submitted proof) */}
+          {approvedApp?.status === 'submitted' && !completionConfirmed && (
+            <TouchableOpacity
+              style={[styles.secondaryActionButton, confirmingCompletion && styles.disabledButton]}
+              onPress={handleConfirmCompletion}
+              disabled={confirmingCompletion}
+            >
+              {confirmingCompletion ? (
+                <ActivityIndicator color="#8B5CF6" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={20} color="#8B5CF6" />
+                  <Text style={styles.secondaryActionText}>Confirm & Release Funds</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {/* Release Funds Button (if completion confirmed but funds not released) */}
+          {completionConfirmed && (
+            <>
+              <TouchableOpacity
+                style={[styles.primaryActionButton, styles.releaseButton, releasingFunds && styles.disabledButton]}
+                onPress={handleReleaseFunds}
+                disabled={releasingFunds}
+              >
+                {releasingFunds ? (
+                  <ActivityIndicator color="white" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="cash" size={20} color="white" />
+                    <Text style={styles.primaryActionText}>Release Funds</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <Text style={styles.manualReleaseNote}>
+                ✅ Completion confirmed. Click above to release funds to the hunter.
+              </Text>
+            </>
+          )}
+        </View>
+      )
+    }
+
+    // For Hunters
+    if (myApp) {
+      if (myApp.status === 'pending') {
+        return (
+          <View style={styles.actionSection}>
+            <View style={styles.statusButton}>
+              <Ionicons name="time" size={20} color="#F59E0B" />
+              <Text style={[styles.actionStatusText, { color: '#F59E0B' }]}>Application Pending</Text>
+            </View>
+          </View>
+        )
+      }
+
+      if (myApp.status === 'approved') {
+        return (
+          <View style={styles.actionSection}>
+            <TouchableOpacity
+              style={[styles.primaryActionButton, styles.proofButton, submittingProof && styles.disabledButton]}
+              onPress={handleSubmitProof}
+              disabled={submittingProof}
+            >
+              {submittingProof ? (
+                <ActivityIndicator color="white" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="camera" size={20} color="white" />
+                  <Text style={styles.primaryActionText}>Submit Proof Photo</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            <Text style={styles.approvedHunterText}>
+              ✅ You're approved! Complete the task and submit proof.
+            </Text>
+          </View>
+        )
+      }
+
+      if (myApp.status === 'submitted') {
+        return (
+          <View style={styles.actionSection}>
+            <View style={styles.statusButton}>
+              <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+              <Text style={[styles.actionStatusText, { color: '#10B981' }]}>
+                Proof Submitted - Awaiting Confirmation
+              </Text>
+            </View>
+            {proofPhoto && (
+              <Text style={styles.proofNote}>
+                📸 Proof photo submitted successfully
+              </Text>
+            )}
+          </View>
+        )
+      }
+
+      if (myApp.status === 'completed') {
+        return (
+          <View style={styles.actionSection}>
+            <View style={styles.statusButton}>
+              <Ionicons name="checkmark-circle" size={20} color="#10B981" />
+              <Text style={[styles.actionStatusText, { color: '#10B981' }]}>
+                ✅ Work Completed & Confirmed!
+              </Text>
+            </View>
+            <Text style={styles.approvedHunterText}>
+              🎉 Bounty completed successfully! Funds have been released.
+            </Text>
+          </View>
+        )
+      }
+
+      return (
+        <View style={styles.actionSection}>
+          <View style={styles.statusButton}>
+            <Ionicons name="information-circle" size={20} color="#6B7280" />
+            <Text style={[styles.actionStatusText, { color: '#6B7280' }]}>
+              Application {myApp.status}
+            </Text>
+          </View>
+        </View>
+      )
+    }
+
+    // For users who haven't applied yet
+    if (canApply()) {
+      return (
+        <View style={styles.actionSection}>
+          <TouchableOpacity
+            style={styles.primaryActionButton}
+            onPress={() => setShowApplyModal(true)}
+          >
+            <Ionicons name="add" size={20} color="white" />
+            <Text style={styles.primaryActionText}>Apply to Bounty</Text>
+          </TouchableOpacity>
+        </View>
+      )
+    }
+
+    // Default case (expired, can't apply, etc.)
+    return (
+      <View style={styles.actionSection}>
+        <View style={styles.statusButton}>
+          <Ionicons name="close-circle" size={20} color="#6B7280" />
+          <Text style={[styles.actionStatusText, { color: '#6B7280' }]}>
+            {isExpired() ? 'Bounty Expired' : 'Cannot Apply'}
+          </Text>
+        </View>
+      </View>
+    )
   }
 
   const renderApplyModal = () => (
@@ -415,34 +900,8 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
         </View>
       </ScrollView>
 
-      {/* Action Button */}
-      {canApply() && (
-        <View style={styles.actionSection}>
-          <TouchableOpacity
-            style={styles.applyActionButton}
-            onPress={() => setShowApplyModal(true)}
-          >
-            <Text style={styles.applyActionText}>Apply to Bounty</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {hasAlreadyApplied() && (
-        <View style={styles.actionSection}>
-          <View style={styles.appliedButton}>
-            <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-            <Text style={styles.appliedText}>Already Applied</Text>
-          </View>
-        </View>
-      )}
-
-      {bounty.creator_id === user?.id && (
-        <View style={styles.actionSection}>
-          <View style={styles.ownerButton}>
-            <Text style={styles.ownerText}>Your Bounty</Text>
-          </View>
-        </View>
-      )}
+      {/* Action Buttons */}
+      {renderActionButtons()}
 
       {renderApplyModal()}
     </View>
@@ -744,5 +1203,77 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  primaryActionButton: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  primaryActionText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  secondaryActionButton: {
+    backgroundColor: 'white',
+    borderWidth: 2,
+    borderColor: '#8B5CF6',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryActionText: {
+    color: '#8B5CF6',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  statusButton: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionStatusText: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  proofButton: {
+    backgroundColor: '#059669', // Green for proof submission
+  },
+  releaseButton: {
+    backgroundColor: '#F59E0B', // Orange for fund release
+  },
+  approvedHunterText: {
+    fontSize: 14,
+    color: '#10B981',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  proofNote: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  manualReleaseNote: {
+    fontSize: 14,
+    color: '#F59E0B',
+    textAlign: 'center',
+    marginTop: 8,
+    fontWeight: '500',
   },
 }) 

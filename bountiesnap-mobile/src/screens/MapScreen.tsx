@@ -13,13 +13,14 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getBounties } from '../utils/supabase';
 
 const { width, height } = Dimensions.get('window');
 
 export default function MapScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const [bounties, setBounties] = useState<any[]>([]);
   const [location, setLocation] = useState<any>(null);
   const [selectedBounty, setSelectedBounty] = useState<any>(null);
@@ -117,7 +118,7 @@ export default function MapScreen({ navigation }: any) {
       </MapView>
 
       {/* Floating Buttons */}
-      <View style={styles.floatingButtons}>
+      <View style={[styles.floatingButtons, { bottom: 80 + Math.max(insets.bottom, 8) }]}>
         <TouchableOpacity
           style={styles.listToggleButton}
           onPress={() => setShowBountyList(!showBountyList)}
@@ -281,7 +282,6 @@ const styles = StyleSheet.create({
   },
   floatingButtons: {
     position: 'absolute',
-    bottom: 100,
     left: 16,
     right: 16,
     flexDirection: 'row',

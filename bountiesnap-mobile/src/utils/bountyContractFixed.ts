@@ -212,59 +212,50 @@ export async function createBountyOnChain(params: CreateBountyParams) {
     
     console.log('✅ Create bounty result:', createBountyResult)
     
-    // Extract the actual bounty ID from the BountyCreated event
+    // Extract the actual bounty ID from the BountyCreated event using Starknet.js
     let actualBountyId = null
     const transactionHash = createBountyResult.result?.transactionHash
     
     if (transactionHash) {
-      console.log('🔍 Parsing transaction events for bounty ID...')
+      console.log('🔍 Using Starknet.js to extract bounty ID from transaction:', transactionHash)
       
-      // Try to get the bounty ID from events in the transaction result
       try {
-        // The result might contain events data
-        if (createBountyResult.result?.events) {
-          console.log('📊 Events found in result:', createBountyResult.result.events)
-          
-          // Look for BountyCreated event
-          const bountyCreatedEvent = createBountyResult.result.events.find((event: any) => 
-            event.keys && event.keys.includes('0xfd841ed94ff583fc725024f72d53a6500f59e7fce3b5fc459f05941e55866c')
-          )
-          
-          if (bountyCreatedEvent && bountyCreatedEvent.data) {
-            // The bounty_id should be the first data element
-            actualBountyId = bountyCreatedEvent.data[0]
-            console.log('🎯 Found BountyCreated event with ID:', actualBountyId)
-          }
+        // Import the new Starknet.js-based parser
+        const { waitAndExtractBountyId } = require('./starknetBountyParser')
+        
+        // Wait up to 30 seconds for transaction confirmation and extract ID
+        actualBountyId = await waitAndExtractBountyId(transactionHash, 30000)
+        
+        if (actualBountyId) {
+          console.log('🎯 Successfully extracted bounty ID using Starknet.js:', actualBountyId)
+        } else {
+          console.log('⚠️ Could not extract bounty ID with Starknet.js - transaction may not be confirmed yet')
         }
         
-        // Alternative: check if there's receipt data
-        if (!actualBountyId && createBountyResult.result?.receipt) {
-          console.log('📊 Checking receipt for events...')
-          const receipt = createBountyResult.result.receipt
-          
-          if (receipt.events) {
-            const bountyEvent = receipt.events.find((event: any) => 
-              event.from_address === BOUNTY_CONTRACT_ADDRESS
+      } catch (starknetError) {
+        console.warn('⚠️ Starknet.js extraction failed, falling back to manual parsing:', starknetError)
+        
+        // Fallback to old method if Starknet.js fails
+        try {
+          if (createBountyResult.result?.events) {
+            console.log('📊 Fallback: Events found in result:', createBountyResult.result.events)
+            
+            const bountyCreatedEvent = createBountyResult.result.events.find((event: any) => 
+              event.keys && (
+                event.keys.includes('0xfd841ed94ff583fc725024f72d53a6500f59e7fce3b5fc459f05941e55866c') ||
+                event.keys[0]?.includes('BountyCreated') ||
+                event.from_address === BOUNTY_CONTRACT_ADDRESS
+              )
             )
             
-            if (bountyEvent && bountyEvent.data) {
-              actualBountyId = bountyEvent.data[0]
-              console.log('🎯 Found bounty ID in receipt:', actualBountyId)
+            if (bountyCreatedEvent && bountyCreatedEvent.data) {
+              actualBountyId = bountyCreatedEvent.data[0]
+              console.log('🎯 Fallback: Found bounty ID:', actualBountyId)
             }
           }
+        } catch (fallbackError) {
+          console.warn('⚠️ Fallback parsing also failed:', fallbackError)
         }
-        
-        // Last resort: try to extract from any returned data
-        if (!actualBountyId && createBountyResult.result?.return_data) {
-          console.log('📊 Checking return data...')
-          if (Array.isArray(createBountyResult.result.return_data) && createBountyResult.result.return_data.length > 0) {
-            actualBountyId = createBountyResult.result.return_data[0]
-            console.log('🎯 Found bounty ID in return data:', actualBountyId)
-          }
-        }
-        
-      } catch (eventParseError) {
-        console.warn('⚠️ Could not parse events from transaction:', eventParseError)
       }
     }
     
@@ -458,6 +449,248 @@ export async function applyToBountyOnChain(bountyId: string, stakeAmount: string
       }
     }
     
+    throw error
+  }
+}
+
+// Approve hunter function - called by bounty creator
+export async function approveHunterOnChain(bountyId: string, hunterAddress: string, userAddress: string, userPrivateKey: string) {
+  const apiKey = process.env.EXPO_PUBLIC_CAVOS_API_KEY
+  
+  if (!apiKey) {
+    throw new Error('Cavos API key not configured')
+  }
+
+  // Convert bounty ID to felt252 format
+  let bountyIdFelt = bountyId
+  if (bountyId.startsWith('0x')) {
+    bountyIdFelt = bountyId
+  } else {
+    bountyIdFelt = stringToFelt252(bountyId)
+  }
+
+  console.log('Approving hunter with params:', {
+    bountyId,
+    bountyIdFelt,
+    hunterAddress,
+    userAddress
+  })
+
+  try {
+    const result = await callExecuteEndpoint(
+      apiKey,
+      'sepolia',
+      [
+        {
+          contractAddress: BOUNTY_CONTRACT_ADDRESS,
+          entrypoint: 'approve_hunter',
+          calldata: [
+            bountyIdFelt,    // bounty_id as felt252
+            hunterAddress    // hunter_address as ContractAddress
+          ]
+        }
+      ],
+      userAddress,
+      userPrivateKey
+    )
+    
+    console.log('✅ Hunter approval result:', result)
+    return result
+
+  } catch (error) {
+    console.error('❌ Error approving hunter:', error)
+    throw error
+  }
+}
+
+// Submit completion function - called by hunter
+export async function submitCompletionOnChain(bountyId: string, proofHash: string, userAddress: string, userPrivateKey: string) {
+  const apiKey = process.env.EXPO_PUBLIC_CAVOS_API_KEY
+  
+  if (!apiKey) {
+    throw new Error('Cavos API key not configured')
+  }
+
+  // Convert bounty ID to felt252 format
+  let bountyIdFelt = bountyId
+  if (bountyId.startsWith('0x')) {
+    bountyIdFelt = bountyId
+  } else {
+    bountyIdFelt = stringToFelt252(bountyId)
+  }
+
+  // Convert proof to felt252 format
+  const proofFelt = stringToFelt252(proofHash)
+
+  console.log('Submitting completion with params:', {
+    bountyId,
+    bountyIdFelt,
+    proofHash,
+    proofFelt,
+    userAddress
+  })
+
+  try {
+    const result = await callExecuteEndpoint(
+      apiKey,
+      'sepolia',
+      [
+        {
+          contractAddress: BOUNTY_CONTRACT_ADDRESS,
+          entrypoint: 'submit_completion',
+          calldata: [
+            bountyIdFelt,    // bounty_id as felt252
+            proofFelt        // proof as felt252
+          ]
+        }
+      ],
+      userAddress,
+      userPrivateKey
+    )
+    
+    console.log('✅ Completion submission result:', result)
+    return result
+
+  } catch (error) {
+    console.error('❌ Error submitting completion:', error)
+    throw error
+  }
+}
+
+// Confirm completion function - called by bounty creator
+export async function confirmCompletionOnChain(bountyId: string, userAddress: string, userPrivateKey: string) {
+  const apiKey = process.env.EXPO_PUBLIC_CAVOS_API_KEY
+  
+  if (!apiKey) {
+    throw new Error('Cavos API key not configured')
+  }
+
+  // Convert bounty ID to felt252 format
+  let bountyIdFelt = bountyId
+  if (bountyId.startsWith('0x')) {
+    bountyIdFelt = bountyId
+  } else {
+    bountyIdFelt = stringToFelt252(bountyId)
+  }
+
+  console.log('Confirming completion with params:', {
+    bountyId,
+    bountyIdFelt,
+    userAddress
+  })
+
+  try {
+    const result = await callExecuteEndpoint(
+      apiKey,
+      'sepolia',
+      [
+        {
+          contractAddress: BOUNTY_CONTRACT_ADDRESS,
+          entrypoint: 'confirm_completion',
+          calldata: [
+            bountyIdFelt     // bounty_id as felt252
+          ]
+        }
+      ],
+      userAddress,
+      userPrivateKey
+    )
+    
+    console.log('✅ Completion confirmation result:', result)
+    return result
+
+  } catch (error) {
+    console.error('❌ Error confirming completion:', error)
+    throw error
+  }
+}
+
+// Release funds function - called after completion is confirmed
+export async function releaseFundsOnChain(bountyId: string, userAddress: string, userPrivateKey: string) {
+  const apiKey = process.env.EXPO_PUBLIC_CAVOS_API_KEY
+  
+  if (!apiKey) {
+    throw new Error('Cavos API key not configured')
+  }
+
+  // Convert bounty ID to felt252 format
+  let bountyIdFelt = bountyId
+  if (bountyId.startsWith('0x')) {
+    bountyIdFelt = bountyId
+  } else {
+    bountyIdFelt = stringToFelt252(bountyId)
+  }
+
+  console.log('Releasing funds with params:', {
+    bountyId,
+    bountyIdFelt,
+    userAddress
+  })
+
+  try {
+    const result = await callExecuteEndpoint(
+      apiKey,
+      'sepolia',
+      [
+        {
+          contractAddress: BOUNTY_CONTRACT_ADDRESS,
+          entrypoint: 'release_funds',
+          calldata: [
+            bountyIdFelt     // bounty_id as felt252
+          ]
+        }
+      ],
+      userAddress,
+      userPrivateKey
+    )
+    
+    console.log('✅ Fund release result:', result)
+    return result
+
+  } catch (error) {
+    console.error('❌ Error releasing funds:', error)
+    throw error
+  }
+}
+
+// Get bounty status function
+export async function getBountyStatusOnChain(bountyId: string, userAddress: string, userPrivateKey: string) {
+  const apiKey = process.env.EXPO_PUBLIC_CAVOS_API_KEY
+  
+  if (!apiKey) {
+    throw new Error('Cavos API key not configured')
+  }
+
+  // Convert bounty ID to felt252 format
+  let bountyIdFelt = bountyId
+  if (bountyId.startsWith('0x')) {
+    bountyIdFelt = bountyId
+  } else {
+    bountyIdFelt = stringToFelt252(bountyId)
+  }
+
+  try {
+    const result = await callExecuteEndpoint(
+      apiKey,
+      'sepolia',
+      [
+        {
+          contractAddress: BOUNTY_CONTRACT_ADDRESS,
+          entrypoint: 'get_bounty_status',
+          calldata: [
+            bountyIdFelt     // bounty_id as felt252
+          ]
+        }
+      ],
+      userAddress,
+      userPrivateKey
+    )
+    
+    console.log('✅ Bounty status result:', result)
+    return result
+
+  } catch (error) {
+    console.error('❌ Error getting bounty status:', error)
     throw error
   }
 } 

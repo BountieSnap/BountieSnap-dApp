@@ -32,7 +32,8 @@
     "react-native-url-polyfill": "^2.0.0",
     "react-native-vector-icons": "^10.0.3",
     "resolve-from": "^5.0.0",
-    "starknet": "^7.6.2"
+    "starknet": "^7.6.2",
+    "expo-file-system": "~18.1.10"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

@@ -66,7 +66,7 @@ export interface BountyApplication {
   hunter_id: string
   stake_amount: string // Stake amount in wei
   stake_amount_strk?: number // Stake amount in STRK for display
-  status: 'pending' | 'approved' | 'rejected' | 'completed'
+  status: 'pending' | 'approved' | 'rejected' | 'submitted' | 'completed'
   transaction_hash?: string
   wallet_address: string
   applied_at: string
@@ -390,6 +390,34 @@ export async function updateApplicationStatus(
     return data
   } catch (error) {
     console.error('Error updating application status:', error)
+    throw error
+  }
+}
+
+// General update function for bounty applications
+export async function updateBountyApplication(
+  applicationId: string,
+  updateData: Partial<BountyApplication>
+): Promise<BountyApplication> {
+  try {
+    const { data, error } = await supabase
+      .from('bounty_applications')
+      .update({
+        ...updateData,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', applicationId)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error updating bounty application:', error)
+      throw error
+    }
+
+    return data
+  } catch (error) {
+    console.error('Error updating bounty application:', error)
     throw error
   }
 } 
