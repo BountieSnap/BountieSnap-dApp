@@ -6,6 +6,7 @@
 
 BountieSnap connects neighbors through crypto-powered micro-tasks. Need groceries? Dog walking? Quick delivery? Post a bounty, get help instantly. Hunters earn tokens + achievement NFTs. Hyperlocal, gamified, zero bureaucracy.
 
+FULL DEMO: VIDEO: https://veed.io/view/ef37a2ac-48e4-4882-9163-3f7aadde983d
 
 https://github.com/user-attachments/assets/aa125187-1054-4d46-a1aa-17299d89137d
 
