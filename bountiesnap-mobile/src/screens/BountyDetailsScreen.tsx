@@ -13,7 +13,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useAuth } from '../context/AuthContext'
-import { getUserWallet, createBountyApplication, getBountyApplications, getBountyById, BountyApplication, Bounty, updateBountyApplication } from '../utils/supabase'
+import { getUserWallet, createBountyApplication, getBountyApplications, getBountyById, BountyApplication, Bounty, updateBountyApplication, updateBountyStatus } from '../utils/supabase'
 import { applyToBountyOnChain, submitCompletionOnChain, confirmCompletionOnChain, releaseFundsOnChain } from '../utils/bountyContractFixed'
 import { extractPrivateKey } from '../utils/walletDebug'
 import { selectProofPhoto, PhotoResult } from '../utils/camera'
@@ -403,6 +403,18 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
         })
       }
 
+      // Update bounty status to 'completed' after successful fund release
+      try {
+        await updateBountyStatus(bounty.id, 'completed')
+        console.log('✅ Bounty status updated to completed')
+        
+        // Update local bounty state to reflect the status change
+        setBounty(prev => prev ? { ...prev, status: 'completed' } : null)
+      } catch (statusError) {
+        console.error('⚠️ Warning: Failed to update bounty status in database:', statusError)
+        // Don't throw error - funds were released successfully, just log the warning
+      }
+
       setCompletionConfirmed(false) // Reset state
       
       Alert.alert(
@@ -496,6 +508,18 @@ export default function BountyDetailsScreen({ navigation, route }: BountyDetails
             status: 'completed',
             updated_at: new Date().toISOString()
           })
+        }
+
+        // Update bounty status to 'completed' after successful fund release
+        try {
+          await updateBountyStatus(bounty.id, 'completed')
+          console.log('✅ Bounty status updated to completed')
+          
+          // Update local bounty state to reflect the status change
+          setBounty(prev => prev ? { ...prev, status: 'completed' } : null)
+        } catch (statusError) {
+          console.error('⚠️ Warning: Failed to update bounty status in database:', statusError)
+          // Don't throw error - funds were released successfully, just log the warning
         }
 
         setCompletionConfirmed(false) // Reset state

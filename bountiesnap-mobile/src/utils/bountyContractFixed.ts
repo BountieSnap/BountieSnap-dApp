@@ -51,7 +51,7 @@ export interface CreateBountyParams {
   userPrivateKey: string
 }
 
-// Check STRK balance of a wallet
+// Check STRK balance of a wallet (DEPRECATED - use starknetBalance.ts instead)
 export async function checkStrkBalance(userAddress: string, userPrivateKey: string) {
   const apiKey = process.env.EXPO_PUBLIC_CAVOS_API_KEY
   
@@ -60,9 +60,11 @@ export async function checkStrkBalance(userAddress: string, userPrivateKey: stri
   }
 
   try {
+    console.log('⚠️ DEPRECATED: Using execute endpoint for balance check (returns transaction hash, not balance)')
     console.log('Checking STRK balance for address:', userAddress)
     
-    // Call balanceOf function on STRK token contract
+    // NOTE: This uses execute endpoint which creates a transaction and returns a hash,
+    // not the actual balance. Use checkStrkBalanceStarknet from starknetBalance.ts instead
     const result = await callExecuteEndpoint(
       apiKey,
       'sepolia',
@@ -77,7 +79,7 @@ export async function checkStrkBalance(userAddress: string, userPrivateKey: stri
       userPrivateKey
     )
     
-    console.log('Balance check result:', result)
+    console.log('Balance check result (likely a transaction hash):', result)
     return result
   } catch (error) {
     console.error('Error checking STRK balance:', error)

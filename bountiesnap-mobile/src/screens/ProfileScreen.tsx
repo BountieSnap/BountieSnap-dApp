@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  Clipboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,12 +17,20 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { useBounty } from '../context/BountyContext';
 import { useAuth } from '../context/AuthContext';
+import { getUserWallet } from '../utils/supabase';
+import { getWalletBalance, formatWalletAddress, getExplorerUrl, getFaucetUrl } from '../utils/walletHelpers';
 
 export default function ProfileScreen() {
   const { user, userTasks, updateAvatar } = useBounty();
   const { signOut, user: authUser } = useAuth();
   const insets = useSafeAreaInsets();
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  
+  // Wallet state
+  const [walletAddress, setWalletAddress] = useState<string>('');
+  const [strkBalance, setStrkBalance] = useState<string>('0.0000');
+  const [loadingWallet, setLoadingWallet] = useState(true);
+  const [loadingBalance, setLoadingBalance] = useState(false);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -32,6 +41,72 @@ export default function ProfileScreen() {
 
   const completedTasks = userTasks.filter(task => task.status === 'completed');
   const streakDays = 12; // Simulated
+
+  // Load wallet data on component mount
+  useEffect(() => {
+    loadWalletData();
+  }, [authUser?.id]);
+
+  const loadWalletData = async () => {
+    if (!authUser?.id) {
+      setLoadingWallet(false);
+      return;
+    }
+
+    try {
+      setLoadingWallet(true);
+      const wallet = await getUserWallet(authUser.id);
+      
+      if (wallet) {
+        setWalletAddress(wallet.wallet_address);
+        await loadBalance(wallet);
+      }
+    } catch (error) {
+      console.error('Error loading wallet data:', error);
+    } finally {
+      setLoadingWallet(false);
+    }
+  };
+
+  const loadBalance = async (wallet: any) => {
+    try {
+      setLoadingBalance(true);
+      const balanceInfo = await getWalletBalance(wallet);
+      
+      if (balanceInfo.error) {
+        console.error('Error loading balance:', balanceInfo.error);
+        setStrkBalance('Error');
+      } else {
+        setStrkBalance(balanceInfo.balanceFormatted);
+      }
+    } catch (error) {
+      console.error('Error checking balance:', error);
+      setStrkBalance('Error');
+    } finally {
+      setLoadingBalance(false);
+    }
+  };
+
+  const copyWalletAddress = () => {
+    if (walletAddress) {
+      Clipboard.setString(walletAddress);
+      Alert.alert('Copied!', 'Wallet address copied to clipboard');
+    }
+  };
+
+  const refreshBalance = async () => {
+    if (!authUser?.id) return;
+    
+    try {
+      const wallet = await getUserWallet(authUser.id);
+      if (wallet) {
+        await loadBalance(wallet);
+      }
+    } catch (error) {
+      console.error('Error refreshing balance:', error);
+      Alert.alert('Error', 'Failed to refresh balance');
+    }
+  };
 
   const handleLogout = async () => {
     const { error } = await signOut();
@@ -191,6 +266,86 @@ export default function ProfileScreen() {
                 <Text style={styles.additionalStatLabel}>Response Time (min)</Text>
               </View>
             </View>
+          </View>
+
+          {/* Wallet Information */}
+          <View style={styles.walletCard}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="wallet-outline" size={20} color="#8B5CF6" />
+              <Text style={styles.cardTitle}>Wallet</Text>
+            </View>
+            
+            {loadingWallet ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#8B5CF6" />
+                <Text style={styles.loadingText}>Loading wallet...</Text>
+              </View>
+            ) : walletAddress ? (
+              <>
+                {/* STRK Balance */}
+                <View style={styles.balanceContainer}>
+                  <View style={styles.balanceHeader}>
+                    <Text style={styles.balanceLabel}>STRK Balance</Text>
+                    <TouchableOpacity 
+                      onPress={refreshBalance}
+                      disabled={loadingBalance}
+                      style={styles.refreshButton}
+                    >
+                      {loadingBalance ? (
+                        <ActivityIndicator size="small" color="#8B5CF6" />
+                      ) : (
+                        <Ionicons name="refresh" size={16} color="#8B5CF6" />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.balanceValue}>
+                    {strkBalance} STRK
+                  </Text>
+                </View>
+
+                {/* Wallet Address */}
+                <View style={styles.addressContainer}>
+                  <Text style={styles.addressLabel}>Wallet Address</Text>
+                  <TouchableOpacity 
+                    style={styles.addressRow}
+                    onPress={copyWalletAddress}
+                  >
+                                         <Text style={styles.addressValue}>
+                       {formatWalletAddress(walletAddress)}
+                     </Text>
+                    <View style={styles.copyButton}>
+                      <Ionicons name="copy-outline" size={16} color="#8B5CF6" />
+                      <Text style={styles.copyText}>Copy</Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Quick Actions */}
+                <View style={styles.walletActions}>
+                                     <TouchableOpacity 
+                     style={styles.actionButton}
+                     onPress={() => Alert.alert('Get Test Tokens', `Visit ${getFaucetUrl()} to get test STRK tokens`)}
+                   >
+                     <Ionicons name="water-outline" size={16} color="#10B981" />
+                     <Text style={styles.actionButtonText}>Get Test Tokens</Text>
+                   </TouchableOpacity>
+                   
+                   <TouchableOpacity 
+                     style={styles.actionButton}
+                     onPress={() => Alert.alert('View on Explorer', `Visit ${getExplorerUrl(walletAddress)} to view your wallet on StarkScan`)}
+                   >
+                     <Ionicons name="open-outline" size={16} color="#3B82F6" />
+                     <Text style={styles.actionButtonText}>View Explorer</Text>
+                   </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <View style={styles.noWalletContainer}>
+                <Ionicons name="wallet-outline" size={32} color="#D1D5DB" />
+                <Text style={styles.noWalletText}>No wallet found</Text>
+                <Text style={styles.noWalletSubtext}>A wallet will be created automatically when you sign up</Text>
+              </View>
+            )}
           </View>
 
           {/* Recent Activity */}
@@ -544,5 +699,131 @@ const styles = StyleSheet.create({
   logoutText: {
     color: '#EF4444',
     fontWeight: '600',
+  },
+  // Wallet card styles
+  walletCard: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginLeft: 8,
+  },
+  balanceContainer: {
+    marginBottom: 16,
+  },
+  balanceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  balanceLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  refreshButton: {
+    padding: 4,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+  },
+  balanceValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  addressContainer: {
+    marginBottom: 16,
+  },
+  addressLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  addressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  addressValue: {
+    fontSize: 16,
+    fontFamily: 'monospace',
+    color: '#374151',
+    fontWeight: '500',
+  },
+  copyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  copyText: {
+    fontSize: 12,
+    color: 'white',
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  walletActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F9FAFB',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  actionButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+    marginLeft: 4,
+  },
+  noWalletContainer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  noWalletText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginTop: 12,
+  },
+  noWalletSubtext: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 20,
   },
 });
